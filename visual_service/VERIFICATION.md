@@ -58,22 +58,22 @@ Results from the final warmed run:
 
 | Generation | Previous ID used | Dimensions | PNG bytes | Duration |
 | --- | --- | --- | ---: | ---: |
-| 1 | none | 512×512 RGB | 425,984 | 0.747 s |
-| 2 | generation 1 (`e906f611…`) | 512×512 RGB | 450,710 | 0.738 s |
+| 1 | none | 512×512 RGB | 431,569 | 0.682 s |
+| 2 | generation 1 (`28dd5a34…`) | 512×512 RGB | 417,486 | 0.769 s |
 
 Both outputs opened successfully with Pillow and the Unix `file` utility.
 Generation 2 used generation 1's returned identifier while also sending the
-original painting path. Mean absolute RGB pixel differences were 24.078 from
-original to generation 1, 37.668 from original to generation 2, and 30.058
+original painting path. Mean absolute RGB pixel differences were 24.723 from
+original to generation 1, 37.857 from original to generation 2, and 30.068
 between generated frames. The images were visually inspected: water lilies,
 willow reflections, palette, and broad composition remained recognizable in
 both, while the warmer second WorldState produced a visibly warmer and more
 varied frame.
 
 The first ever request after model loading took 3.248 s; subsequent requests
-were approximately 0.7–0.8 s. After inference, `footprint` reported 4,722 MB
-physical footprint, including 4,258 MB in `IOAccelerator`, with a 4,992 MB peak.
-Process RSS was approximately 638 MB. No swap or service crash was observed.
+were approximately 0.7–0.9 s. After inference, the current run's `footprint`
+reported 4,681 MB physical footprint, including 4,258 MB in `IOAccelerator`.
+Process RSS was approximately 581 MB. No swap or service crash was observed.
 
 ## Swift integration and failure behavior
 
@@ -88,8 +88,10 @@ swift run EvolvingImpressionistVerify
 
 The verifier completed two Swift `VisualAPIClient` requests, required
 `image/png` plus a PNG signature, and decoded both responses with AppKit
-`NSImage`. It then sent a deliberately invalid raster reference, received a
-controlled HTTP 400 JSON error, and confirmed `/health` remained available.
+`NSImage`. It also asserted that the first response resolved the original and
+the second resolved both the original and generation 1. It then sent a
+deliberately invalid raster reference, received a controlled HTTP 400 JSON
+error, and confirmed `/health` remained available.
 The verifier then exercised the actual application `VisualService` through an
 injected client: one valid raster established `currentImage` and its generation
 ID, and the following request failed. It confirmed the same `NSImage` instance,

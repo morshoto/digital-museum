@@ -98,6 +98,11 @@ model, device, output dimensions, and raster media type.
 {"state":{"brightness":0.6,"warmth":0.7,"abstraction":0.3,"motion":0.4,"tension":0.2},"reference":{"originalImagePath":"/absolute/path/to/painting.jpg","previousGenerationID":null}}
 ```
 
+Successful responses include `referenceUsage.originalImage` and
+`referenceUsage.previousImage`. These backend-neutral booleans let verification
+confirm that the service resolved each requested source; Swift does not need to
+know which model or drift-control algorithm consumed them.
+
 Run backend tests in the real environment:
 
 ```sh
@@ -105,8 +110,9 @@ uv run --frozen --extra diffusion python -m py_compile visual_service/server.py 
 uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
 ```
 
-With the real service running, exercise two sequential generations and decode
-the returned PNGs with Pillow:
+With the real service running, exercise two sequential generations, assert the
+original/prior-frame reference chain, decode the returned PNGs with Pillow, send
+an invalid raster reference, and confirm the service remains healthy:
 
 ```sh
 uv run --frozen --extra diffusion python visual_service/verify_real.py \
