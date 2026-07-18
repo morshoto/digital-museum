@@ -4,7 +4,6 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var controller: InstallationController
     @State private var showDeveloperMode = false
-    @State private var fadeProgress = 1.0
 
     var body: some View {
         ZStack {
@@ -25,39 +24,25 @@ struct ContentView: View {
         .onAppear { controller.start() }
         .onDisappear { controller.stop() }
         .onReceive(NotificationCenter.default.publisher(for: .toggleDeveloperMode)) { _ in showDeveloperMode.toggle() }
-        .onChange(of: controller.visual.transitionID) { transitionID in beginCrossfade(transitionID) }
     }
 
-    @ViewBuilder private var artwork: some View {
-        if controller.visual.currentImage == nil {
+    private var artwork: some View {
+        ZStack {
             Canvas { context, size in
                 let gradient = Gradient(colors: [.indigo.opacity(0.8), .orange.opacity(0.6), .black])
                 context.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(gradient, startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
-            }.ignoresSafeArea()
-        } else {
-            ZStack {
-                if let previous = controller.visual.previousImage {
-                    Image(nsImage: previous).resizable().scaledToFill().opacity(1 - fadeProgress)
-                }
-                if let current = controller.visual.currentImage {
-                    Image(nsImage: current).resizable().scaledToFill().opacity(fadeProgress)
-                }
-            }.ignoresSafeArea().clipped()
+            }
+            if let current = controller.visual.currentImage {
+                Image(nsImage: current)
+                    .resizable()
+                    .scaledToFill()
+                    .id(controller.visual.transitionID)
+                    .transition(.opacity)
+            }
         }
-    }
-
-    private func beginCrossfade(_ transitionID: Int) {
-        var reset = Transaction()
-        reset.disablesAnimations = true
-        withTransaction(reset) {
-            fadeProgress = controller.visual.previousImage == nil ? 1 : 0
-        }
-        guard controller.visual.previousImage != nil else { return }
-        let duration = max(1.2, 5.0 - controller.engine.state.motion * 3.0)
-        DispatchQueue.main.async {
-            guard transitionID == controller.visual.transitionID else { return }
-            withAnimation(.easeInOut(duration: duration)) { fadeProgress = 1 }
-        }
+        .animation(.easeInOut(duration: max(1.2, 5.0 - controller.engine.state.motion * 3.0)), value: controller.visual.transitionID)
+        .ignoresSafeArea()
+        .clipped()
     }
 }
 
