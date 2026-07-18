@@ -16,11 +16,11 @@ let worldBrightness  = cF 0.5 "brightness"
 d1 $ fast (range 0.55 2.2 worldMotion)
    $ sometimesBy worldAbstraction (iter 4)
    $ stack
-      [ slow 2 $ n "0 2 4 6" # scale "minor" # s "superpiano"
+      [ slow 2 $ n (scale "minor" "0 2 4 6") # s "superpiano"
           # legato 1.4
           # lpf (range 650 12000 worldBrightness)
           # gain (range 0.13 0.52 worldWarmth)
-      , slow 4 $ n "7 4 2 9" # scale "minor" # s "arpy"
+      , slow 4 $ n (scale "minor" "7 4 2 9") # s "arpy"
           # lpf (range 650 12000 worldBrightness)
           # gain (range 0.52 0.13 worldWarmth)
       ]

@@ -27,6 +27,14 @@ done
 
 VISUAL_SERVICE_URL="http://127.0.0.1:$service_port" swift run EvolvingImpressionistVerify
 
+if command -v nix >/dev/null 2>&1; then
+    nix develop --command ./scripts/verify-tidal-source.sh
+elif command -v ghci >/dev/null 2>&1 && ghc-pkg latest tidal >/dev/null 2>&1; then
+    ./scripts/verify-tidal-source.sh
+else
+    printf '%s\n' 'SKIP: Nix or a GHCi environment with TidalCycles is required for Tidal source verification'
+fi
+
 sclang_path=$(command -v sclang 2>/dev/null || true)
 if [ -z "$sclang_path" ] && [ -x /Applications/SuperCollider.app/Contents/MacOS/sclang ]; then
     sclang_path=/Applications/SuperCollider.app/Contents/MacOS/sclang

@@ -19,7 +19,8 @@ music control over OSC.
 - Swift 5.9 or newer (`swift --version`).
 - `uv` 0.10 or newer. The Python 3.13 runtime and dependency graph are defined
   by `.python-version`, `pyproject.toml`, and `uv.lock`.
-- Optional for music: SuperCollider, SuperDirt, TidalCycles, and suitable samples.
+- Optional for music: Nix, Homebrew SuperCollider, SuperDirt, SC3-Plugins, and
+  suitable samples. `flake.nix` pins GHC, Cabal, and TidalCycles.
 - Optional for real images: the `diffusion` project extra and approximately
   5 GB of free runtime memory for the proven SD-Turbo/MPS path.
 
@@ -95,6 +96,31 @@ full setup, model override, mapping, and real verification commands.
 
 ## OSC, SuperCollider, and TidalCycles
 
+Enter the pinned TidalCycles environment and start its GHCi session with:
+
+```sh
+nix develop
+./scripts/tidal-session.sh
+```
+
+The verified Apple Silicon environment provides GHC/GHCi 9.10.3, Cabal
+3.16.1.0, and TidalCycles 1.10.1. SuperCollider 3.14.1 was installed with
+`brew install --cask supercollider`; its CLI is at
+`/Applications/SuperCollider.app/Contents/MacOS/sclang`.
+
+If SC3-Plugins already exist in the legacy macOS support directory but current
+SuperCollider scans the XDG directory, activate that existing installation
+with this reversible link before starting SuperDirt:
+
+```sh
+mkdir -p "$HOME/.local/share/SuperCollider/Extensions"
+ln -s "$HOME/Library/Application Support/SuperCollider/Extensions/SC3plugins" \
+  "$HOME/.local/share/SuperCollider/Extensions/SC3plugins"
+```
+
+Do not recreate the link when the target already exists. Without SC3-Plugins,
+SuperDirt cannot load the `superpiano` voice used by the composition.
+
 The app sends OSC float messages at approximately 10 Hz:
 
 ```text
@@ -155,6 +181,11 @@ This is the acceptance test for audible integration:
 
 If `superpiano` is unavailable in the local SuperDirt installation, replace it
 with another sustained local sound in the first `d1` voice.
+
+The first live verification, including independent parameter evidence,
+`/dirt/play` observations, stereo recording measurements, exact setup commands,
+and the distinction between transport and audio-output proof, is recorded in
+[`tidal/LIVE_VERIFICATION.md`](tidal/LIVE_VERIFICATION.md).
 
 ## Verification
 
@@ -226,7 +257,8 @@ controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
   Its output is square and its prompt fidelity is below larger current models.
 - The selected model configuration has no safety checker. Keep the localhost
   service private and review the model license before public deployment.
-- TidalCycles/SuperCollider startup and audio output remain a manual test.
+- Physical speaker audibility remains an operator check even though the live
+  verification records and measures the real SuperDirt stereo output.
 - Modulation edits are in-memory only.
 - No one-hour endurance run is part of the quick verification command.
 - A signed `.app` bundle, launch-at-login setup, display selection, and power/
