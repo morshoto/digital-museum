@@ -171,6 +171,14 @@ struct VerificationRunner {
             state: .init(brightness: 0.8, warmth: 0.7, abstraction: 0.6, motion: 0.9, tension: 0.5),
             reference: .init(originalImagePath: originalImagePath, previousGenerationID: first.generationID)
         ))
+        try require(
+            first.referenceUsage == VisualReferenceUsage(originalImage: originalImagePath != nil, previousImage: false),
+            "first generation reference usage did not match the request"
+        )
+        try require(
+            second.referenceUsage == VisualReferenceUsage(originalImage: originalImagePath != nil, previousImage: true),
+            "second generation did not resolve its predecessor and original as requested"
+        )
         guard let firstData = first.imageData, let secondData = second.imageData else {
             throw VerificationFailure(description: "visual response did not contain base64 image data")
         }
