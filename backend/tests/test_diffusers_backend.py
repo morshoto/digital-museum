@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from visual_service.server import (
+from backend.server import (
     DriftConfiguration,
     DiffusersBackend,
     artistic_state,

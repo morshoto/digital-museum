@@ -46,7 +46,7 @@ if command -v uv >/dev/null 2>&1; then
         else
             required_fail "diffusion dependencies are unavailable; run ./scripts/install-runtime.sh"
         fi
-    elif uv run --frozen python -c 'import visual_service.server' >/dev/null 2>&1; then
+    elif uv run --frozen python -c 'import backend.server' >/dev/null 2>&1; then
         required_ok "locked Python mock environment"
     else
         required_fail "Python environment is unavailable; run ./scripts/install-runtime.sh"

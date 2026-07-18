@@ -6,7 +6,7 @@
   API contract, bundled painting catalog, and OSC transport.
 - `Sources/EvolvingImpressionist` — SwiftUI/AppKit exhibition and Developer Mode.
 - `Sources/EvolvingImpressionistVerify` — framework-free Swift integration checks.
-- `visual_service` — dependency-free mock renderer and Diffusers img2img backend.
+- `backend` — dependency-free mock renderer and Diffusers img2img backend.
 - `tidal` — TidalCycles patterns and SuperCollider WorldState bridge.
 - `scripts` — installation lifecycle, verification, and endurance automation.
 
@@ -32,7 +32,7 @@ The SDXL Turbo backend blends original and previous inputs, pulls more strongly
 toward the original every fifth frame, and applies a small post-generation
 anchor. Raw abstraction remains the hard upper bound on visual divergence.
 See [Shared artistic state](SHARED_ARTISTIC_STATE.md) and the
-[visual-service guide](../visual_service/README.md) for the mappings and drift
+[visual-service guide](../backend/README.md) for the mappings and drift
 controls.
 
 ## Music signal path
@@ -50,13 +50,13 @@ Swift WorldState
 The bridge produces no musical events itself. It converts the five Swift OSC
 paths into Tidal's native controls while the patterns continue running.
 
-| Shared quality | Tidal behavior |
-| --- | --- |
-| `luminosity` | Opens the low-pass filter. |
-| `fluidity` | Expands room and size and contributes to event flow. |
-| `instability` | Raises mutation, detuning, rhythmic nudge, and crush. |
-| `serenity` | Lengthens pitched-event legato. |
-| `density` | Scales both patterns' event activity. |
+| Shared quality | Tidal behavior                                        |
+| -------------- | ----------------------------------------------------- |
+| `luminosity`   | Opens the low-pass filter.                            |
+| `fluidity`     | Expands room and size and contributes to event flow.  |
+| `instability`  | Raises mutation, detuning, rhythmic nudge, and crush. |
+| `serenity`     | Lengthens pitched-event legato.                       |
+| `density`      | Scales both patterns' event activity.                 |
 
 Raw warmth preserves a constant-sum crossfade between warm and cool voices.
 The app sends the five OSC values at approximately 10 Hz; the default

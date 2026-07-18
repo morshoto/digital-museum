@@ -18,7 +18,7 @@ From the repository root:
 
 ```sh
 uv sync --frozen
-EVOLVING_BACKEND=mock uv run --frozen python visual_service/server.py
+EVOLVING_BACKEND=mock uv run --frozen python backend/server.py
 ```
 
 ## Reproducible Diffusers installation
@@ -37,7 +37,7 @@ Start the real backend:
 ```sh
 HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
-uv run --frozen --extra diffusion python visual_service/server.py
+uv run --frozen --extra diffusion python backend/server.py
 ```
 
 The first launch downloads the fp16 SDXL Turbo components (approximately 7 GB).
@@ -48,7 +48,7 @@ default only when intentionally testing another Img2Img-compatible checkpoint:
 ```sh
 EVOLVING_MODEL_ID=/absolute/path/or/hugging-face-id \
 EVOLVING_BACKEND=diffusers \
-uv run --frozen --extra diffusion python visual_service/server.py
+uv run --frozen --extra diffusion python backend/server.py
 ```
 
 `EVOLVING_IMAGE_WIDTH` and `EVOLVING_IMAGE_HEIGHT` default to 1024 and 576 and
@@ -83,13 +83,13 @@ usage to grow over a long-running exhibition.
 The unchanged five-field request is converted into the deterministic shared
 artistic state documented in [`../docs/SHARED_ARTISTIC_STATE.md`](../docs/SHARED_ARTISTIC_STATE.md).
 
-| Artistic quality | Diffusion mapping |
-| --- | --- |
-| luminosity | Final exposure plus prompt illumination |
-| fluidity | Bounded Img2Img strength modifier, flowing gesture prompt, and mock stroke deformation |
-| instability | Bounded strength modifier, final contrast/sharpness, structural prompt, and non-Turbo CFG |
-| serenity | Additional original-image anchoring and composition-preservation prompt |
-| density | Non-Turbo step count, texture prompt, and mock stroke count |
+| Artistic quality | Diffusion mapping                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| luminosity       | Final exposure plus prompt illumination                                                   |
+| fluidity         | Bounded Img2Img strength modifier, flowing gesture prompt, and mock stroke deformation    |
+| instability      | Bounded strength modifier, final contrast/sharpness, structural prompt, and non-Turbo CFG |
+| serenity         | Additional original-image anchoring and composition-preservation prompt                   |
+| density          | Non-Turbo step count, texture prompt, and mock stroke count                               |
 
 Raw `warmth` retains red/blue source color-temperature scaling and palette
 language. The generation sequence still changes the deterministic seed so
@@ -146,8 +146,8 @@ know which model or drift-control algorithm consumed them.
 Run backend tests in the real environment:
 
 ```sh
-uv run --frozen --extra diffusion python -m py_compile visual_service/server.py visual_service/verify_real.py
-uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
+uv run --frozen --extra diffusion python -m py_compile backend/server.py backend/verify_real.py
+uv run --frozen --extra diffusion python -m unittest discover -s backend/tests -v
 ```
 
 With the real service running, exercise 20 sequential generations plus
@@ -157,14 +157,14 @@ contact sheet, send an invalid raster reference, and confirm the service remains
 healthy:
 
 ```sh
-uv run --frozen --extra diffusion python visual_service/verify_real.py \
+uv run --frozen --extra diffusion python backend/verify_real.py \
   --original /absolute/path/to/painting.jpg
 ```
 
 Verify the same real responses through Swift and AppKit:
 
 ```sh
-VISUAL_SERVICE_URL=http://127.0.0.1:8000 \
+backend_URL=http://127.0.0.1:8000 \
 EXPECTED_VISUAL_BACKEND=diffusers \
 swift run EvolvingImpressionistVerify
 ```

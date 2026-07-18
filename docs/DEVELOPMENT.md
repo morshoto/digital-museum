@@ -15,7 +15,7 @@ uv sync --frozen --extra diffusion
 
 HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
-uv run --frozen --extra diffusion python visual_service/server.py
+uv run --frozen --extra diffusion python backend/server.py
 ```
 
 Swift uses the bundled Monet *Water Lilies* reference unless
@@ -93,4 +93,4 @@ the one-hour exhibition gate.
 
 Recorded real-backend timings, memory measurements, sequential generation IDs,
 failure recovery, and AppKit decoding are in
-[Real Diffusers verification](../visual_service/VERIFICATION.md).
+[Real Diffusers verification](../backend/VERIFICATION.md).

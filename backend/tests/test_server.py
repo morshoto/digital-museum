@@ -7,7 +7,7 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from visual_service.server import GenerationStore, MockBackend, create_server
+from backend.server import GenerationStore, MockBackend, create_server
 
 
 VALID_STATE = {"brightness": .6, "warmth": .7, "abstraction": .3, "motion": .4, "tension": .2}
@@ -133,7 +133,7 @@ class VisualServiceTests(unittest.TestCase):
                 return {"ok": True, "backend": self.name}
 
             def generate(self, state, original, previous):
-                from visual_service.server import RequestError
+                from backend.server import RequestError
                 raise RequestError("diffusers mode requires an original image or a previous generation")
 
         output = io.StringIO()
