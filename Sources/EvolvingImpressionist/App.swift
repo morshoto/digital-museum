@@ -1,4 +1,5 @@
 import AppKit
+import EvolvingImpressionistCore
 import SwiftUI
 
 @main
@@ -21,14 +22,18 @@ struct EvolvingImpressionistApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var didEnterExhibition = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NotificationCenter.default.addObserver(forName: .toggleFullscreen, object: nil, queue: .main) { _ in
             NSApp.windows.first?.toggleFullScreen(nil)
         }
         // Exhibition mode is the default: the first window fills the display
         // without requiring a visitor or operator to touch the keyboard.
-        DispatchQueue.main.async {
-            NSApp.windows.first?.toggleFullScreen(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, !didEnterExhibition, let window = NSApp.windows.first else { return }
+            didEnterExhibition = true
+            if !window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
         }
     }
 }

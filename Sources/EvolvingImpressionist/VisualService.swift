@@ -1,40 +1,65 @@
 import AppKit
+import EvolvingImpressionistCore
 import Foundation
-
-struct VisualRequest: Codable {
-    let state: WorldState
-    let previousSVG: String?
-}
-
-struct VisualResponse: Codable { let svg: String; let prompt: String }
 
 @MainActor
 final class VisualService: ObservableObject {
-    @Published private(set) var image: NSImage?
+    @Published private(set) var currentImage: NSImage?
+    @Published private(set) var previousImage: NSImage?
+    @Published private(set) var transitionID = 0
     @Published private(set) var lastPrompt = ""
     @Published private(set) var isGenerating = false
-    var endpoint = URL(string: "http://127.0.0.1:8000/generate")!
-    private var previousSVG: String?
+    @Published private(set) var status: TransportStatus = .idle
+    @Published private(set) var lastError: String?
+    @Published private(set) var backend = "unknown"
 
-    func generate(for state: WorldState) {
+    private var client: VisualAPIClient
+    private var previousGenerationID: String?
+    private let originalImagePath: String?
+
+    init(
+        baseURL: URL = URL(string: ProcessInfo.processInfo.environment["EVOLVING_VISUAL_URL"] ?? "http://127.0.0.1:8000")!,
+        originalImagePath: String? = ProcessInfo.processInfo.environment["EVOLVING_ORIGINAL_IMAGE"]
+    ) {
+        self.client = VisualAPIClient(baseURL: baseURL)
+        self.originalImagePath = originalImagePath
+    }
+
+    func checkHealth() async {
+        status = .connecting
+        do {
+            let health = try await client.health()
+            backend = health.backend
+            status = health.ok ? .ready : .failed("Service reported unhealthy")
+            lastError = nil
+        } catch {
+            status = .failed(error.localizedDescription)
+            lastError = error.localizedDescription
+        }
+    }
+
+    func generate(for state: WorldState) async {
         guard !isGenerating else { return }
         isGenerating = true
-        let request = VisualRequest(state: state, previousSVG: previousSVG)
-        var urlRequest = URLRequest(url: endpoint)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.httpBody = try? JSONEncoder().encode(request)
-        URLSession.shared.dataTask(with: urlRequest) { [weak self] data, _, _ in
-            guard let data, let response = try? JSONDecoder().decode(VisualResponse.self, from: data), let imageData = response.svg.data(using: .utf8), let image = NSImage(data: imageData) else {
-                Task { @MainActor in self?.isGenerating = false }
-                return
+        defer { isGenerating = false }
+        let reference = VisualReference(originalImagePath: originalImagePath, previousGenerationID: previousGenerationID)
+        do {
+            let response = try await client.generate(.init(state: state, reference: reference))
+            guard let data = response.imageData, let image = NSImage(data: data) else {
+                throw VisualAPIError.invalidImageData
             }
-            Task { @MainActor in
-                self?.previousSVG = response.svg
-                self?.lastPrompt = response.prompt
-                self?.image = image
-                self?.isGenerating = false
-            }
-        }.resume()
+            previousImage = currentImage
+            currentImage = image
+            previousGenerationID = response.generationID
+            lastPrompt = response.prompt
+            backend = response.backend
+            lastError = nil
+            status = .ready
+            transitionID += 1
+        } catch {
+            // Retain the last valid frame and retry on the controller's next cycle.
+            status = .failed(error.localizedDescription)
+            lastError = error.localizedDescription
+        }
     }
 }
