@@ -68,24 +68,31 @@ usage to grow over a long-running exhibition.
 
 ## WorldState mapping and drift control
 
-| State | Diffusion mapping |
+The unchanged five-field request is converted into the deterministic shared
+artistic state documented in [`../docs/SHARED_ARTISTIC_STATE.md`](../docs/SHARED_ARTISTIC_STATE.md).
+
+| Artistic quality | Diffusion mapping |
 | --- | --- |
-| brightness | Source exposure plus prompt illumination |
-| warmth | Red/blue source color-temperature scaling plus palette prompt |
-| abstraction | Img2Img strength and reduced—but never removed—original anchor |
-| motion | Img2Img strength, changing deterministic seed, and brush-motion prompt |
-| tension | Source contrast, atmosphere prompt, and CFG for non-Turbo models |
+| luminosity | Source exposure plus prompt illumination |
+| fluidity | Img2Img strength, flowing gesture prompt, and mock stroke deformation |
+| instability | Img2Img strength, source contrast, structural prompt, and CFG for non-Turbo models |
+| serenity | Original-image anchor and composition-preservation prompt |
+| density | Non-Turbo step count, texture prompt, and mock stroke count |
+
+Raw `warmth` retains red/blue source color-temperature scaling and palette
+language. The generation sequence still changes the deterministic seed so
+successive frames evolve without adding an independent artistic-state input.
 
 For SD-Turbo, classifier-free guidance is correctly disabled. Four steps and a
 minimum strength of 0.25 satisfy the model's Img2Img requirement that
 `steps × strength >= 1`.
 
 Each sequential source is a blend of the previous generated image and the
-original painting. The original weight ranges from 55% at low abstraction to
-30% at maximum abstraction, so iterative generations cannot silently lose the
-anchor. Brightness, temperature, and contrast adjustments are applied after
-the blend. A backend lock prevents concurrent access to the non-thread-safe
-MPS pipeline.
+original painting. The original weight ranges from 55% at maximum serenity to
+30% at minimum serenity, so iterative generations cannot silently lose the
+anchor. Luminosity, temperature, and instability-driven contrast adjustments
+are applied after the blend. A backend lock prevents concurrent access to the
+non-thread-safe MPS pipeline.
 
 ## API and verification
 

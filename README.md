@@ -87,12 +87,14 @@ uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
 The proven default is `stabilityai/sd-turbo` at 512×512 on Apple Silicon MPS.
-The backend blends the original with the previous frame using a 30–55% original
-anchor, maps `abstraction`/`motion` to Img2Img strength, `brightness` to source
-exposure, `warmth` to color temperature, and `tension` to contrast/instability.
-Prompt language carries the same state. Swift remains coupled only to the HTTP
-contract. See [`visual_service/README.md`](visual_service/README.md) for the
-full setup, model override, mapping, and real verification commands.
+The backend derives luminosity, fluidity, instability, serenity, and density
+from the five raw values. Those qualities jointly drive exposure, Img2Img
+strength, contrast/guidance, original anchoring, texture, and prompt language;
+raw warmth retains precise color-temperature control. Swift remains coupled
+only to the unchanged HTTP contract. See
+[`docs/SHARED_ARTISTIC_STATE.md`](docs/SHARED_ARTISTIC_STATE.md) for the audit,
+equations, mapping tables, response timing, and calibration states, and
+[`visual_service/README.md`](visual_service/README.md) for backend setup.
 
 ## OSC, SuperCollider, and TidalCycles
 
@@ -148,13 +150,18 @@ five existing OSC paths into Tidal's native `/ctrl <name> <float>` input. The
 running patterns read the latest controls with `cF`/`cT`, so the composition
 keeps running while its pattern and sound parameters change.
 
-| WorldState value | Tidal-generated musical behavior |
+| Shared quality | Tidal-generated musical behavior |
 | --- | --- |
-| `brightness` | Opens the Tidal `lpf` control from 650 Hz to 12 kHz. |
-| `warmth` | Constant-sum gain crossfades Tidal's warm `superpiano`/kick/clap voices against its cool `arpy`/hi-hat voices, limiting loudness drift. |
-| `abstraction` | Raises the probability of four-step `iter` transformations, increasing motif and rhythm variation. |
-| `motion` | Scales both patterns from `fast 0.55` to `fast 2.2`, continuously changing note/event density without a restart. |
-| `tension` | Adds pitched-voice detuning, rhythmic `nudge`, and increasingly coarse `crush`. |
+| `luminosity` | Opens Tidal's `lpf`, sharing the visual world's spectral brightness. |
+| `fluidity` | Expands `room`/`size` and contributes to flowing event density. |
+| `instability` | Raises motif mutation, detuning, rhythmic `nudge`, and coarse `crush`. |
+| `serenity` | Lengthens pitched-event `legato` for calmer, connected phrases. |
+| `density` | Continuously scales both running patterns' event activity. |
+
+Raw `warmth` retains the compatible constant-sum crossfade between warm
+`superpiano`/kick/clap and cool `arpy`/hi-hat voices. All derived qualities are
+continuous expressions over the existing `cF` controls; no pattern restart is
+needed.
 
 ### Live music smoke test
 
