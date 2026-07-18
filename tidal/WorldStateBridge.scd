@@ -10,7 +10,9 @@
     motion: 0.4,
     tension: 0.2
 );
-~tidalWorldStateTarget = NetAddr("127.0.0.1", 6010);
+~tidalWorldStateHost = "127.0.0.1";
+~tidalWorldStatePort = ("EVOLVING_TIDAL_CONTROL_PORT".getenv ? "6010").asInteger;
+~tidalWorldStateTarget = NetAddr(~tidalWorldStateHost, ~tidalWorldStatePort);
 
 [\brightness, \warmth, \abstraction, \motion, \tension].do { |name|
     var definitionName = ("evolving_" ++ name).asSymbol;
@@ -28,5 +30,5 @@
     }, "/" ++ name);
 };
 
-"WorldStateBridge ready: forwarding five controls to Tidal on 127.0.0.1:6010".postln;
+("WorldStateBridge ready: forwarding five controls to Tidal on " ++ ~tidalWorldStateHost ++ ":" ++ ~tidalWorldStatePort).postln;
 )
