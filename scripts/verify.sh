@@ -24,3 +24,13 @@ until curl -fsS "http://127.0.0.1:$service_port/health" >/dev/null; do
 done
 
 VISUAL_SERVICE_URL="http://127.0.0.1:$service_port" swift run EvolvingImpressionistVerify
+
+sclang_path=$(command -v sclang 2>/dev/null || true)
+if [ -z "$sclang_path" ] && [ -x /Applications/SuperCollider.app/Contents/MacOS/sclang ]; then
+    sclang_path=/Applications/SuperCollider.app/Contents/MacOS/sclang
+fi
+if [ -n "$sclang_path" ]; then
+    "$sclang_path" -D tidal/VerifyWorldStateBridge.scd
+else
+    printf '%s\n' 'SKIP: sclang not found; SuperDirt bridge runtime verification unavailable'
+fi
