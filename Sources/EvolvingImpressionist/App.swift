@@ -23,17 +23,38 @@ struct EvolvingImpressionistApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var didEnterExhibition = false
+    private var fullscreenRetry: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NotificationCenter.default.addObserver(forName: .toggleFullscreen, object: nil, queue: .main) { _ in
-            NSApp.windows.first?.toggleFullScreen(nil)
+            Self.exhibitionWindow?.toggleFullScreen(nil)
         }
         // Exhibition mode is the default: the first window fills the display
         // without requiring a visitor or operator to touch the keyboard.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, !didEnterExhibition, let window = NSApp.windows.first else { return }
-            didEnterExhibition = true
-            if !window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+        enterExhibitionWhenWindowIsReady()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        fullscreenRetry?.cancel()
+    }
+
+    private func enterExhibitionWhenWindowIsReady(attempt: Int = 0) {
+        guard !didEnterExhibition else { return }
+        guard let window = Self.exhibitionWindow else {
+            guard attempt < 100 else { return }
+            let retry = DispatchWorkItem { [weak self] in
+                self?.enterExhibitionWhenWindowIsReady(attempt: attempt + 1)
+            }
+            fullscreenRetry = retry
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: retry)
+            return
         }
+        didEnterExhibition = true
+        fullscreenRetry?.cancel()
+        if !window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+    }
+
+    private static var exhibitionWindow: NSWindow? {
+        NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain })
     }
 }

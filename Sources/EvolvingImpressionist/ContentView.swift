@@ -25,7 +25,7 @@ struct ContentView: View {
         .onAppear { controller.start() }
         .onDisappear { controller.stop() }
         .onReceive(NotificationCenter.default.publisher(for: .toggleDeveloperMode)) { _ in showDeveloperMode.toggle() }
-        .onChange(of: controller.visual.transitionID) { _ in beginCrossfade() }
+        .onChange(of: controller.visual.transitionID) { transitionID in beginCrossfade(transitionID) }
     }
 
     @ViewBuilder private var artwork: some View {
@@ -46,11 +46,16 @@ struct ContentView: View {
         }
     }
 
-    private func beginCrossfade() {
-        fadeProgress = controller.visual.previousImage == nil ? 1 : 0
+    private func beginCrossfade(_ transitionID: Int) {
+        var reset = Transaction()
+        reset.disablesAnimations = true
+        withTransaction(reset) {
+            fadeProgress = controller.visual.previousImage == nil ? 1 : 0
+        }
         guard controller.visual.previousImage != nil else { return }
         let duration = max(1.2, 5.0 - controller.engine.state.motion * 3.0)
         DispatchQueue.main.async {
+            guard transitionID == controller.visual.transitionID else { return }
             withAnimation(.easeInOut(duration: duration)) { fadeProgress = 1 }
         }
     }
@@ -71,7 +76,11 @@ struct DeveloperPanel: View {
                     Spacer()
                     Button(visual.isGenerating ? "Generating…" : "Generate now", action: generateNow).disabled(visual.isGenerating)
                 }
-                StatusRow(title: "Visual", status: visual.status.label, isReady: visual.status == .ready)
+                StatusRow(
+                    title: "Visual",
+                    status: "\(visual.status.label) · \(visual.generationSuccessCount) ok · \(visual.generationFailureCount) failed",
+                    isReady: visual.status == .ready
+                )
                 StatusRow(title: "OSC", status: "\(osc.status.label) · \(osc.sentMessageCount) sent", isReady: osc.status == .ready)
                 if let error = visual.lastError {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)

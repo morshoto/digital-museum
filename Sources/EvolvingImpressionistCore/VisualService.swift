@@ -11,6 +11,8 @@ public final class VisualService: ObservableObject {
     @Published public private(set) var status: TransportStatus = .idle
     @Published public private(set) var lastError: String?
     @Published public private(set) var backend = "unknown"
+    @Published public private(set) var generationSuccessCount = 0
+    @Published public private(set) var generationFailureCount = 0
     public private(set) var previousGenerationID: String?
 
     private let client: any VisualAPIProviding
@@ -58,11 +60,13 @@ public final class VisualService: ObservableObject {
             backend = response.backend
             lastError = nil
             status = .ready
+            generationSuccessCount += 1
             transitionID += 1
         } catch {
             // Retain the last valid frame and retry on the controller's next cycle.
             status = .failed(error.localizedDescription)
             lastError = error.localizedDescription
+            generationFailureCount += 1
         }
     }
 }
