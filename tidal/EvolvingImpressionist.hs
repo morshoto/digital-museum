@@ -19,10 +19,10 @@ d1 $ fast (range 0.55 2.2 worldMotion)
       [ slow 2 $ n "0 2 4 6" # scale "minor" # s "superpiano"
           # legato 1.4
           # lpf (range 650 12000 worldBrightness)
-          # gain (range 0.18 0.72 worldWarmth)
+          # gain (range 0.13 0.52 worldWarmth)
       , slow 4 $ n "7 4 2 9" # scale "minor" # s "arpy"
           # lpf (range 650 12000 worldBrightness)
-          # gain (range 0.34 0.08 worldWarmth)
+          # gain (range 0.52 0.13 worldWarmth)
       ]
    # detune (range 0 0.42 worldTension)
    # crush (range 16 5 worldTension)
@@ -32,9 +32,9 @@ d1 $ fast (range 0.55 2.2 worldMotion)
 d2 $ fast (range 0.55 2.2 worldMotion)
    $ sometimesBy worldAbstraction (iter 4)
    $ stack
-      [ s "bd*2" # gain (range 0.38 0.76 worldWarmth)
-      , s "~ hh*8" # gain (range 0.42 0.12 worldWarmth)
-      , every 7 rev $ s "~ cp ~ cp" # gain (range 0.18 0.34 worldWarmth)
+      [ s "bd*2" # gain (range 0.28 0.52 worldWarmth)
+      , s "~ hh*8" # gain (range 0.44 0.08 worldWarmth)
+      , every 7 rev $ s "~ cp ~ cp" # gain (range 0.12 0.24 worldWarmth)
       ]
    # lpf (range 650 12000 worldBrightness)
    # nudge (range 0 0.09 worldTension)

@@ -111,7 +111,7 @@ keeps running while its pattern and sound parameters change.
 | WorldState value | Tidal-generated musical behavior |
 | --- | --- |
 | `brightness` | Opens the Tidal `lpf` control from 650 Hz to 12 kHz. |
-| `warmth` | Crossfades Tidal's warm `superpiano`/kick/clap voices against its cool `arpy`/hi-hat voices. |
+| `warmth` | Constant-sum gain crossfades Tidal's warm `superpiano`/kick/clap voices against its cool `arpy`/hi-hat voices, limiting loudness drift. |
 | `abstraction` | Raises the probability of four-step `iter` transformations, increasing motif and rhythm variation. |
 | `motion` | Scales both patterns from `fast 0.55` to `fast 2.2`, continuously changing note/event density without a restart. |
 | `tension` | Adds pitched-voice detuning, rhythmic `nudge`, and increasingly coarse `crush`. |
@@ -124,7 +124,9 @@ This is the acceptance test for audible integration:
 2. Evaluate all of [`tidal/WorldStateBridge.scd`](tidal/WorldStateBridge.scd).
    Confirm it reports forwarding controls to `127.0.0.1:6010`.
 3. Start a TidalCycles session and evaluate all definitions and both patterns
-   in [`tidal/EvolvingImpressionist.hs`](tidal/EvolvingImpressionist.hs).
+   in [`tidal/EvolvingImpressionist.hs`](tidal/EvolvingImpressionist.hs). First
+   confirm both `d1` and `d2` type-check and evaluate, especially the
+   pattern-valued `sometimesBy worldAbstraction (iter 4)` expression.
 4. Launch `swift run EvolvingImpressionist`, press `Cmd-D`, enable an override
    for one parameter, and alternate it between `0` and `1`. Hold all other
    overrides at `0.5` so each comparison is independent.
@@ -161,6 +163,10 @@ that focused check directly with:
 /Applications/SuperCollider.app/Contents/MacOS/sclang -D tidal/VerifyWorldStateBridge.scd
 ```
 
+Run the focused bridge verification without an active Tidal controller
+listener: both use UDP port 6010. The verifier exits with an explicit bind
+error if it cannot reserve that port.
+
 This machine currently has Apple Command Line Tools without Xcode's XCTest
 runtime, so the Swift checks use a repository-owned executable that exits
 nonzero on failure. The checks remain automated and require no GUI.
@@ -174,6 +180,9 @@ nonzero on failure. The checks remain automated and require no GUI.
   port but does not prove `/dirt/play` output or audible sound; the live music
   smoke test above remains manual unless a complete TidalCycles session is
   available.
+- The Tidal file uses APIs whose current signatures accept pattern-valued
+  controls, but it has not been type-checked in this repository environment
+  because GHC/TidalCycles is not installed.
 - Modulation edits are in-memory only.
 - No one-hour endurance run is part of the quick verification command.
 - A signed `.app` bundle, launch-at-login setup, display selection, and power/
