@@ -6,10 +6,12 @@ service_port=8877
 service_log=/tmp/evolving-impressionist-visual-service.log
 
 cd "$repo_dir"
-python3 -m unittest discover -s visual_service/tests -v
+uv sync --frozen
+uv run --frozen python -m py_compile visual_service/server.py visual_service/verify_real.py
+uv run --frozen python -m unittest discover -s visual_service/tests -v
 swift build
 
-EVOLVING_VISUAL_PORT=$service_port EVOLVING_QUIET=1 python3 visual_service/server.py >"$service_log" 2>&1 &
+EVOLVING_VISUAL_PORT=$service_port EVOLVING_QUIET=1 uv run --frozen python visual_service/server.py >"$service_log" 2>&1 &
 service_pid=$!
 trap 'kill "$service_pid" 2>/dev/null || true' EXIT INT TERM
 
