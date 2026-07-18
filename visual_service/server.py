@@ -313,7 +313,8 @@ def handler_for(backend: VisualBackend, store: GenerationStore):
                 payload = json.loads(self.rfile.read(length))
                 state, original_path, previous_id = parse_request(payload)
                 original = Path(original_path).expanduser().read_bytes() if original_path else None
-                result = backend.generate(state, original, store.get(previous_id))
+                previous = store.get(previous_id)
+                result = backend.generate(state, original, previous)
                 generation_id = store.put(result.image)
                 self._send(200, {
                     "imageBase64": base64.b64encode(result.image).decode(),
@@ -321,6 +322,10 @@ def handler_for(backend: VisualBackend, store: GenerationStore):
                     "generationID": generation_id,
                     "prompt": result.prompt,
                     "backend": backend.name,
+                    "referenceUsage": {
+                        "originalImage": original is not None,
+                        "previousImage": previous is not None,
+                    },
                 })
             except (RequestError, ValueError, TypeError, json.JSONDecodeError) as error:
                 self._send(400, {"error": str(error)})
