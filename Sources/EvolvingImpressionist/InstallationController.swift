@@ -1,4 +1,5 @@
 import EvolvingImpressionistCore
+import Darwin
 import Foundation
 
 @MainActor
@@ -52,5 +53,6 @@ final class InstallationController: ObservableObject {
             "generations_failed=\(visual.generationFailureCount) " +
             "osc_sent=\(osc.sentMessageCount) \(values)"
         )
+        fflush(stdout)
     }
 }

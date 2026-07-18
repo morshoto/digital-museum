@@ -31,8 +31,17 @@ event() { printf '%s %s\n' "$(timestamp)" "$*" | tee -a "$events"; }
 
 start_service() {
     EVOLVING_BACKEND=mock EVOLVING_VISUAL_PORT="$service_port" EVOLVING_QUIET=1 \
-        stdbuf -oL uv run --frozen python "$repo_dir/visual_service/server.py" >>"$service_log" 2>&1 &
+        uv run --frozen python -u "$repo_dir/visual_service/server.py" >>"$service_log" 2>&1 &
     service_pid=$!
+}
+
+wait_for_unhealthy() {
+    health_attempt=0
+    while curl -fsS "http://127.0.0.1:$service_port/health" >/dev/null 2>&1; do
+        health_attempt=$((health_attempt + 1))
+        if [ "$health_attempt" -ge 50 ]; then return 1; fi
+        sleep 0.1
+    done
 }
 
 wait_for_health() {
@@ -69,7 +78,7 @@ fi
 EVOLVING_VISUAL_URL="http://127.0.0.1:$service_port" \
 EVOLVING_GENERATION_INTERVAL="$generation_interval" \
 EVOLVING_DIAGNOSTICS=1 \
-    caffeinate -dimsu stdbuf -oL "$repo_dir/.build/release/EvolvingImpressionist" >>"$app_log" 2>&1 &
+    caffeinate -dimsu "$repo_dir/.build/release/EvolvingImpressionist" >>"$app_log" 2>&1 &
 caffeinate_pid=$!
 # With a utility argument, macOS caffeinate execs the utility in its original
 # PID and starts a small assertion helper beneath it. Sample the original PID;
@@ -86,7 +95,11 @@ started=$(date +%s)
 outage_stopped=0
 outage_recovered=0
 successes_at_outage=0
+failures_at_outage=0
 successes_at_restart=0
+failures_at_restart=0
+outage_health_failed=0
+outage_failure_observed=0
 generation_recovered=0
 
 while :; do
@@ -102,14 +115,32 @@ while :; do
     if [ "$outage_stopped" -eq 0 ] && [ "$elapsed" -ge "$outage_at" ]; then
         successes_at_outage=$(latest_counter generations_ok)
         successes_at_outage=${successes_at_outage:-0}
+        failures_at_outage=$(latest_counter generations_failed)
+        failures_at_outage=${failures_at_outage:-0}
+        if [ "$successes_at_outage" -lt 1 ]; then
+            event "FAIL outage started before any successful generation"
+            exit 1
+        fi
         kill "$service_pid" 2>/dev/null || true
         wait "$service_pid" 2>/dev/null || true
         service_pid=
+        if ! wait_for_unhealthy; then
+            event "FAIL visual service health remained available after stop"
+            exit 1
+        fi
+        outage_health_failed=1
         outage_stopped=1
-        event "OUTAGE_STARTED elapsed=$elapsed generations_ok=$successes_at_outage"
+        event "OUTAGE_STARTED elapsed=$elapsed generations_ok=$successes_at_outage generations_failed=$failures_at_outage health_unavailable=1"
     fi
 
     if [ "$outage_stopped" -eq 1 ] && [ "$outage_recovered" -eq 0 ] && [ "$elapsed" -ge $((outage_at + outage_duration)) ]; then
+        failures_at_restart=$(latest_counter generations_failed)
+        failures_at_restart=${failures_at_restart:-0}
+        if [ "$failures_at_restart" -le "$failures_at_outage" ]; then
+            event "FAIL no generation failure occurred during outage failures_before=$failures_at_outage failures_after=$failures_at_restart"
+            exit 1
+        fi
+        outage_failure_observed=1
         start_service
         if ! wait_for_health; then
             event "FAIL visual service did not restart"
@@ -118,7 +149,7 @@ while :; do
         successes_at_restart=$(latest_counter generations_ok)
         successes_at_restart=${successes_at_restart:-0}
         outage_recovered=1
-        event "OUTAGE_RECOVERY_STARTED elapsed=$elapsed service_pid=$service_pid generations_ok=$successes_at_restart"
+        event "OUTAGE_RECOVERY_STARTED elapsed=$elapsed service_pid=$service_pid generations_ok=$successes_at_restart generations_failed=$failures_at_restart"
     fi
 
     if [ "$outage_recovered" -eq 1 ] && [ "$generation_recovered" -eq 0 ]; then
@@ -145,8 +176,8 @@ failure_count=$(latest_counter generations_failed)
 success_count=${success_count:-0}
 failure_count=${failure_count:-0}
 
-if [ "$outage_stopped" -eq 1 ] && [ "$failure_count" -lt 1 ]; then
-    event "FAIL outage produced no recorded generation failure"
+if [ "$outage_stopped" -eq 1 ] && { [ "$outage_health_failed" -ne 1 ] || [ "$outage_failure_observed" -ne 1 ]; }; then
+    event "FAIL outage did not prove both unavailable health and a new generation failure"
     exit 1
 fi
 if [ "$outage_recovered" -eq 1 ] && [ "$generation_recovered" -ne 1 ]; then

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import EvolvingImpressionistCore
 import SwiftUI
 
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var didEnterExhibition = false
+    private var isEnteringExhibition = false
     private var isExhibitionFullscreen = false
     private var windowedPresentation: WindowedPresentation?
     private var fullscreenRetry: DispatchWorkItem?
@@ -57,15 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func enterExhibitionWhenWindowIsReady() {
-        guard !didEnterExhibition else { return }
+        guard !didEnterExhibition, !isEnteringExhibition else { return }
         guard let window = Self.exhibitionWindow else {
             scheduleFullscreenRetry()
             return
         }
         fullscreenRetry?.cancel()
         fullscreenRetry = nil
-        enterFullscreen(window)
-        didEnterExhibition = true
+        isEnteringExhibition = true
+        didEnterExhibition = enterFullscreen(window)
+        isEnteringExhibition = false
+        if !didEnterExhibition { scheduleFullscreenRetry() }
     }
 
     private func toggleFullscreen() {
@@ -77,12 +81,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if isExhibitionFullscreen {
             exitFullscreen(window)
         } else {
-            enterFullscreen(window)
+            _ = enterFullscreen(window)
         }
     }
 
-    private func enterFullscreen(_ window: NSWindow) {
-        guard !isExhibitionFullscreen, let screen = window.screen ?? NSScreen.main else { return }
+    private func enterFullscreen(_ window: NSWindow) -> Bool {
+        guard !isExhibitionFullscreen else { return true }
+        guard let screen = window.screen ?? NSScreen.main else { return false }
         windowedPresentation = WindowedPresentation(
             frame: window.frame,
             styleMask: window.styleMask,
@@ -100,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrame(screen.frame, display: true)
         isExhibitionFullscreen = true
         logDiagnostic("fullscreen_entered=1 width=\(Int(screen.frame.width)) height=\(Int(screen.frame.height))")
+        return true
     }
 
     private func exitFullscreen(_ window: NSWindow) {
@@ -130,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func logDiagnostic(_ message: String) {
         guard ProcessInfo.processInfo.environment["EVOLVING_DIAGNOSTICS"] == "1" else { return }
         print("[installation] \(message)")
+        fflush(stdout)
     }
 
     private static var exhibitionWindow: NSWindow? {

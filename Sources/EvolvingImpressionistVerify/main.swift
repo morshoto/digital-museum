@@ -237,7 +237,7 @@ struct VerificationRunner {
             try require(afterFailureHealth.ok && afterFailureHealth.backend == "diffusers", "real backend crashed after a controlled generation failure")
         }
         try await verifyVisualServiceTransitions(first: first, second: second)
-        print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles plus repeated retained-frame transitions and recovery")
+        print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles plus retained frames across network/undecodable failures and recovery")
     }
 
     @MainActor
@@ -252,10 +252,18 @@ struct VerificationRunner {
             prompt: first.prompt,
             backend: first.backend
         )
+        let undecodable = VisualGenerationResponse(
+            imageBase64: Data("not an image".utf8).base64EncodedString(),
+            mediaType: first.mediaType,
+            generationID: "undecodable-\(first.generationID)",
+            prompt: first.prompt,
+            backend: first.backend
+        )
         let client = SequencedVisualClient(backend: first.backend, steps: [
             .response(first),
             .response(second),
             .failure(.cannotConnectToHost),
+            .response(undecodable),
             .failure(.networkConnectionLost),
             .response(recovered),
         ])
@@ -277,7 +285,7 @@ struct VerificationRunner {
         try require(visual.previousImage === firstImage, "second valid frame did not retain the outgoing image")
         try require(secondImage !== firstImage && visual.transitionID == 2, "second valid frame did not advance exactly one transition")
 
-        for expectedFailures in 1...2 {
+        for expectedFailures in 1...3 {
             await visual.generate(for: WorldState())
             try require(visual.currentImage === secondImage, "VisualService replaced the valid image after request failure \(expectedFailures)")
             try require(visual.previousImage === firstImage, "VisualService cleared the outgoing image after request failure \(expectedFailures)")
@@ -290,10 +298,10 @@ struct VerificationRunner {
         try require(visual.previousImage === secondImage, "recovery did not retain the last valid frame for crossfade")
         try require(visual.currentImage !== secondImage, "recovery did not install a replacement image")
         try require(visual.previousGenerationID == recovered.generationID && visual.transitionID == 3, "recovery did not advance exactly one transition")
-        try require(visual.generationSuccessCount == 3 && visual.generationFailureCount == 2, "generation counters did not reflect repeated success/failure")
+        try require(visual.generationSuccessCount == 3 && visual.generationFailureCount == 3, "generation counters did not reflect network and undecodable-response failures")
         try require(visual.status == .ready && visual.lastError == nil && !visual.isGenerating, "successful recovery did not clear the failed/stalled state")
 
         let references = await client.receivedReferences()
-        try require(references.map(\.previousGenerationID) == [nil, first.generationID, second.generationID, second.generationID, second.generationID], "failed attempts corrupted the previous-generation reference")
+        try require(references.map(\.previousGenerationID) == [nil, first.generationID, second.generationID, second.generationID, second.generationID, second.generationID], "failed attempts corrupted the previous-generation reference")
     }
 }

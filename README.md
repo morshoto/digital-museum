@@ -196,19 +196,21 @@ swift build -c release
 
 The endurance runner uses `caffeinate -dimsu`, shortens generation cadence to
 six seconds, introduces a 30-second service outage after ten minutes, verifies
-that generation recovers, samples application RSS/virtual memory/CPU every 30
-seconds, checks every logged parameter remains within `0...1`, and writes
+that `/health` becomes unavailable, requires a new generation failure during
+the outage, and verifies that generation recovers after `/health` returns. It
+samples application RSS/virtual memory/CPU every 30 seconds, checks every logged
+parameter remains within `0...1`, and writes
 `app.log`, `service.log`, `events.log`, `process.csv`, and `summary.txt` under a
 reported temporary log directory. Environment variables prefixed with
 `EVOLVING_ENDURANCE_` can shorten the run for script smoke testing; a shortened
 run is not equivalent to the one-hour exhibition gate.
 
-The default modulation periods and phases do not form a perceptually obvious
-one-hour loop. Even the shortest complete per-parameter cycle (`motion`) is
-1,336,007 seconds (about 15.46 days); the exact common period across all 15
-sine components is approximately `5.54e31` years. Individual short components
-repeat within an hour, but their differently phased secondary and low-frequency
-components do not realign with them during that window.
+The configured integer-second modulation periods and phases do not realign
+within any practically relevant exhibition duration. The shortest complete
+per-parameter cycle is `motion` at 1,336,007 seconds (about 15.46 days), computed
+from its `31`, `71`, and `607` second defaults in `WorldState.swift`. Individual
+short components repeat within an hour, but their differently phased secondary
+and low-frequency components do not realign with them during that window.
 
 The real SD-Turbo/MPS run, sequential identifiers, timings, memory footprint,
 controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
