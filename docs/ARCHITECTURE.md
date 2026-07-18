@@ -23,6 +23,23 @@ Later generations combine the same original, the previous generation, and the
 current WorldState. The original remains a persistent drift-control anchor and
 is never replaced by only the previous frame.
 
+`VisualService` publishes each decoded Diffusion result as one atomic
+`VisualFrame`; generation remains asynchronous and does not drive display
+ticks. `VisualTransitionTimeline` independently retains the visible keyframe
+mixture, transition start, adaptive duration, normalized progress, and newest
+target. SwiftUI samples it at display cadence. A smootherstep blend runs for up
+to 30 seconds (or 90% of a shorter observed keyframe interval), while one
+deterministic low-frequency scale-and-drift transform keeps the composite in
+motion between generations. Interrupted transitions freeze their current layer
+weights before accepting a newer target, so stale arrivals and failures cannot
+reset opacity or blank the display.
+
+The presentation transform uses no raster processing. `motion` raises its
+amplitude and speed only inside a `1.00...1.02` scale and six-point offset
+envelope; `tension` adds a small deterministic second harmonic. Applying the
+same transform to the complete composite preserves object alignment and avoids
+independent face or object distortion.
+
 Swift resolves `EVOLVING_ORIGINAL_IMAGE` first as a fail-closed override. When
 it is unset, `PaintingCatalog` selects Monet's *Water Lilies* (1906) from the
 SwiftPM resource bundle. `Bundle.module` provides a real filesystem URL that

@@ -41,9 +41,11 @@ macOS Space. Confirm the intended display is primary before launch.
 - `Cmd-F` toggles the borderless exhibition presentation.
 
 The last valid artwork remains visible during service or decoding failures.
-Later cycles retry, and valid replacement frames crossfade over the retained
-frame. UDP does not require a receiver, so disabling the music stack does not
-stop visual generation.
+Later cycles retry. Valid replacement frames blend over the retained frame while
+subtle deterministic scale and drift keep the painting moving between
+generations. A replacement arriving during an active transition starts from the
+currently visible composite rather than resetting opacity. UDP does not require
+a receiver, so disabling the music stack does not stop visual generation.
 
 For unattended operation, the launcher forces `EVOLVING_DIAGNOSTICS=1` and
 defaults to `caffeinate -dimsu`. Connect the Mac to AC power and manually verify

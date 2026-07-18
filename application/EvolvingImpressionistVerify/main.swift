@@ -57,6 +57,7 @@ struct VerificationRunner {
         do {
             try verifyParameters()
             try verifyArtisticState()
+            try verifyVisualTransitionTimeline()
             try verifyPaintingReferences()
             try await verifyOSC()
             try await verifyOSCWithoutReceiver()
@@ -197,6 +198,66 @@ struct VerificationRunner {
     private static func requireValue<T>(_ value: T?, _ message: String) throws -> T {
         guard let value else { throw VerificationFailure(description: message) }
         return value
+    }
+
+    private static func verifyVisualTransitionTimeline() throws {
+        let configuration = VisualTransitionConfiguration(duration: 10)
+        var timeline = VisualTransitionTimeline(configuration: configuration)
+        let images = (0..<4).map { _ in NSImage(size: NSSize(width: 16, height: 16)) }
+
+        timeline.receive(.init(currentImage: images[0], transitionID: 1), at: 0)
+        try require(timeline.hasValidImage, "initial keyframe left the transition timeline blank")
+        try require(timeline.presentation(at: 0).count == 1, "initial keyframe did not settle immediately")
+
+        timeline.receive(.init(currentImage: images[1], previousImage: images[0], transitionID: 2), at: 20)
+        let progressTimes = stride(from: 20.0, through: 30.0, by: 0.25)
+        let progress = progressTimes.map { timeline.normalizedProgress(at: $0) }
+        try require(progress.allSatisfy { (0...1).contains($0) }, "transition progress escaped 0...1")
+        try require(zip(progress, progress.dropFirst()).allSatisfy { $0 <= $1 }, "transition progress was not monotonic")
+
+        let supersedeTime = 24.0
+        let beforeSupersede = Dictionary(uniqueKeysWithValues: timeline.presentation(at: supersedeTime).map { ($0.id, $0.opacity) })
+        timeline.receive(.init(currentImage: images[2], previousImage: images[1], transitionID: 3), at: supersedeTime)
+        let afterSupersede = Dictionary(uniqueKeysWithValues: timeline.presentation(at: supersedeTime).map { ($0.id, $0.opacity) })
+        for (id, opacity) in beforeSupersede {
+            try require(abs((afterSupersede[id] ?? -1) - opacity) < 0.000_001, "superseding keyframe reset visible opacity for layer \(id)")
+        }
+        try require(abs((afterSupersede[3] ?? -1)) < 0.000_001, "superseding target appeared with nonzero initial opacity")
+        try require(abs(afterSupersede.values.reduce(0, +) - 1) < 0.000_001, "superseding keyframe produced a blank or over-bright composite")
+
+        timeline.receive(.init(currentImage: images[1], transitionID: 2), at: 25)
+        try require(timeline.latestTransitionID == 3 && timeline.targetImage === images[2], "stale transition overwrote the newer target")
+        timeline.receive(.init(currentImage: nil, transitionID: 4), at: 25)
+        try require(timeline.latestTransitionID == 3 && timeline.hasValidImage, "missing keyframe cleared the last valid image")
+
+        timeline.receive(.init(currentImage: images[3], previousImage: images[2], transitionID: 4), at: 26)
+        try require(timeline.presentation(at: 26).reduce(0) { $0 + $1.opacity } > 0.999_999, "rapid A-B-C-D updates created a blank state")
+        let finalLayers = timeline.presentation(at: 40).filter { $0.opacity > 0.000_001 }
+        try require(finalLayers.count == 1 && finalLayers[0].id == 4 && finalLayers[0].image === images[3], "final presentation did not settle on the latest valid keyframe")
+
+        let states = [
+            WorldState(motion: 0, tension: 0),
+            WorldState(motion: 1, tension: 0),
+            WorldState(motion: 1, tension: 1),
+        ]
+        for state in states {
+            for time in stride(from: 0.0, through: 180.0, by: 0.37) {
+                let first = timeline.presentationTransform(at: time, worldState: state)
+                let second = timeline.presentationTransform(at: time, worldState: state)
+                try require(first == second, "identical transform input and timestamp were not deterministic")
+                try require((1...1.02).contains(first.scale), "presentation scale escaped 1.00...1.02")
+                try require(abs(first.offsetX) <= 6.000_001 && abs(first.offsetY) <= 6.000_001, "presentation offset escaped the six-point bound")
+            }
+        }
+        let still = timeline.presentationTransform(at: 0, worldState: .init(motion: 0, tension: 0))
+        let active = timeline.presentationTransform(at: 0, worldState: .init(motion: 1, tension: 0))
+        try require(hypot(active.offsetX, active.offsetY) > hypot(still.offsetX, still.offsetY), "motion did not increase micro-motion magnitude")
+        try require(abs(active.offsetX) <= 6 && abs(active.offsetY) <= 6, "motion exceeded safe micro-motion limits")
+
+        let fiveSecondStart = timeline.presentationTransform(at: 0, worldState: .init(motion: 0, tension: 0))
+        let fiveSecondEnd = timeline.presentationTransform(at: 5, worldState: .init(motion: 0, tension: 0))
+        try require(hypot(fiveSecondEnd.offsetX - fiveSecondStart.offsetX, fiveSecondEnd.offsetY - fiveSecondStart.offsetY) > 2, "lowest-motion presentation did not accumulate visible change over five seconds")
+        print("PASS: bounded deterministic continuous interpolation, five-second micro-motion, stale-update safety, and rapid A-B-C-D supersession")
     }
 
     private static func verifyPaintingReferences() throws {

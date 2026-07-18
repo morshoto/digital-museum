@@ -110,9 +110,12 @@ Swift continues sending raw OSC state at approximately 10 Hz. Tidal reads the
 latest controls inside its continuously running patterns, so audible response
 arrives over the next events and cycles (roughly sub-second to several
 seconds). The visual service samples the same world only when generating a new
-frame, normally every 45 seconds, and Swift crossfades valid frames. Thus both
-media inhabit the same state trajectory while music articulates short changes
-and visuals integrate a slower snapshot instead of moving in lockstep.
+frame, normally every 45 seconds. Swift continuously interpolates valid
+keyframes and applies bounded low-frequency presentation motion between them;
+raw `motion` controls only the safe transform amplitude and speed, while raw
+`tension` contributes a small deterministic second harmonic. Thus both media
+inhabit the same state trajectory while music articulates short changes and
+visuals integrate a slower snapshot instead of moving in lockstep.
 
 ## Contrasting tuning states
 
