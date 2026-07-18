@@ -1,33 +1,36 @@
 import AppKit
-import EvolvingImpressionistCore
 import Foundation
 
 @MainActor
-final class VisualService: ObservableObject {
-    @Published private(set) var currentImage: NSImage?
-    @Published private(set) var previousImage: NSImage?
-    @Published private(set) var transitionID = 0
-    @Published private(set) var lastPrompt = ""
-    @Published private(set) var isGenerating = false
-    @Published private(set) var status: TransportStatus = .idle
-    @Published private(set) var lastError: String?
-    @Published private(set) var backend = "unknown"
-    @Published private(set) var generationSuccessCount = 0
-    @Published private(set) var generationFailureCount = 0
+public final class VisualService: ObservableObject {
+    @Published public private(set) var currentImage: NSImage?
+    @Published public private(set) var previousImage: NSImage?
+    @Published public private(set) var transitionID = 0
+    @Published public private(set) var lastPrompt = ""
+    @Published public private(set) var isGenerating = false
+    @Published public private(set) var status: TransportStatus = .idle
+    @Published public private(set) var lastError: String?
+    @Published public private(set) var backend = "unknown"
+    @Published public private(set) var generationSuccessCount = 0
+    @Published public private(set) var generationFailureCount = 0
+    public private(set) var previousGenerationID: String?
 
-    private var client: VisualAPIClient
-    private var previousGenerationID: String?
+    private let client: any VisualAPIProviding
     private let originalImagePath: String?
 
-    init(
+    public convenience init(
         baseURL: URL = URL(string: ProcessInfo.processInfo.environment["EVOLVING_VISUAL_URL"] ?? "http://127.0.0.1:8000")!,
         originalImagePath: String? = ProcessInfo.processInfo.environment["EVOLVING_ORIGINAL_IMAGE"]
     ) {
-        self.client = VisualAPIClient(baseURL: baseURL)
+        self.init(client: VisualAPIClient(baseURL: baseURL), originalImagePath: originalImagePath)
+    }
+
+    public init(client: any VisualAPIProviding, originalImagePath: String?) {
+        self.client = client
         self.originalImagePath = originalImagePath
     }
 
-    func checkHealth() async {
+    public func checkHealth() async {
         status = .connecting
         do {
             let health = try await client.health()
@@ -40,7 +43,7 @@ final class VisualService: ObservableObject {
         }
     }
 
-    func generate(for state: WorldState) async {
+    public func generate(for state: WorldState) async {
         guard !isGenerating else { return }
         isGenerating = true
         defer { isGenerating = false }

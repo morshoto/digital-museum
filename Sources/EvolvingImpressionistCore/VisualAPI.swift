@@ -27,12 +27,30 @@ public struct VisualGenerationResponse: Codable, Equatable, Sendable {
     public let prompt: String
     public let backend: String
 
+    public init(imageBase64: String, mediaType: String, generationID: String, prompt: String, backend: String) {
+        self.imageBase64 = imageBase64
+        self.mediaType = mediaType
+        self.generationID = generationID
+        self.prompt = prompt
+        self.backend = backend
+    }
+
     public var imageData: Data? { Data(base64Encoded: imageBase64) }
 }
 
 public struct VisualHealthResponse: Codable, Equatable, Sendable {
     public let ok: Bool
     public let backend: String
+
+    public init(ok: Bool, backend: String) {
+        self.ok = ok
+        self.backend = backend
+    }
+}
+
+public protocol VisualAPIProviding: Sendable {
+    func health() async throws -> VisualHealthResponse
+    func generate(_ request: VisualGenerationRequest) async throws -> VisualGenerationResponse
 }
 
 public enum VisualAPIError: LocalizedError {
@@ -49,7 +67,7 @@ public enum VisualAPIError: LocalizedError {
     }
 }
 
-public final class VisualAPIClient: @unchecked Sendable {
+public final class VisualAPIClient: VisualAPIProviding, @unchecked Sendable {
     public let baseURL: URL
     private let session: URLSession
 

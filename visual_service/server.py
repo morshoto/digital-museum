@@ -13,12 +13,16 @@ import math
 import os
 from pathlib import Path
 import random
+import threading
 from typing import Protocol
 from urllib.parse import urlparse
 import uuid
 
 
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
+DEFAULT_DIFFUSERS_MODEL = "stabilityai/sd-turbo"
+DEFAULT_IMAGE_SIZE = 512
+DEFAULT_GENERATION_HISTORY_LIMIT = 16
 
 
 class RequestError(ValueError):
@@ -40,6 +44,8 @@ class VisualBackend(Protocol):
     name: str
 
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult: ...
+
+    def health(self) -> dict[str, object]: ...
 
 
 def parse_request(payload: object) -> tuple[dict[str, float], str | None, str | None]:
@@ -78,6 +84,9 @@ def prompt_for(state: dict[str, float]) -> str:
 class MockBackend:
     name = "mock"
 
+    def health(self) -> dict[str, object]:
+        return {"ok": True, "backend": self.name}
+
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
         reference_digest = hashlib.sha256((original or b"original") + (previous or b"previous")).hexdigest()
         seed_material = json.dumps(state, sort_keys=True) + reference_digest
@@ -104,52 +113,178 @@ class MockBackend:
         return GenerationResult(svg, "image/svg+xml", prompt_for(state))
 
 
+@dataclass(frozen=True)
+class DiffusionSettings:
+    strength: float
+    num_inference_steps: int
+    guidance_scale: float
+    original_weight: float
+    seed: int
+
+
+def diffusion_settings(state: dict[str, float], sequence: int, turbo: bool) -> DiffusionSettings:
+    """Map normalized world state to bounded, model-safe diffusion controls."""
+    strength = min(0.78, 0.25 + state["abstraction"] * 0.42 + state["motion"] * 0.10)
+    steps = 4 if turbo else max(12, round(16 + state["abstraction"] * 8 + state["motion"] * 4))
+    # SD-Turbo is explicitly trained without classifier-free guidance.
+    guidance = 0.0 if turbo else 3.5 + state["tension"] * 3.0
+    # Every iterative source retains at least 30% of the original painting.
+    original_weight = 0.55 - state["abstraction"] * 0.25
+    state_key = ":".join(f"{state[key]:.4f}" for key in PARAMETERS)
+    seed_key = f"{state_key}:{sequence}:{round(state['motion'] * 1000)}"
+    seed = int(hashlib.sha256(seed_key.encode()).hexdigest()[:8], 16)
+    return DiffusionSettings(strength, steps, guidance, original_weight, seed)
+
+
+def model_load_source(model_id: str) -> str:
+    """Resolve a downloaded Hub ID to its concrete snapshot in offline mode."""
+    expanded = Path(model_id).expanduser()
+    if expanded.exists():
+        return str(expanded)
+    if os.environ.get("HF_HUB_OFFLINE") != "1" or "/" not in model_id:
+        return model_id
+    default_home = Path.home() / ".cache" / "huggingface"
+    hub_root = Path(os.environ.get("HF_HUB_CACHE", Path(os.environ.get("HF_HOME", default_home)) / "hub"))
+    repository = hub_root / f"models--{model_id.replace('/', '--')}"
+    reference = repository / "refs" / "main"
+    try:
+        revision = reference.read_text().strip()
+    except OSError:
+        return model_id
+    snapshot = repository / "snapshots" / revision
+    return str(snapshot) if (snapshot / "model_index.json").is_file() else model_id
+
+
 class DiffusersBackend:
     name = "diffusers"
 
-    def __init__(self, model_id: str):
+    def __init__(
+        self,
+        model_id: str = DEFAULT_DIFFUSERS_MODEL,
+        *,
+        width: int = DEFAULT_IMAGE_SIZE,
+        height: int = DEFAULT_IMAGE_SIZE,
+        pipeline=None,
+        torch_module=None,
+        device: str | None = None,
+    ):
+        if width < 64 or height < 64 or width % 8 or height % 8:
+            raise BackendUnavailable("diffusion dimensions must be multiples of 8 and at least 64 pixels")
+        self.model_id = model_id
+        self.width = width
+        self.height = height
+        self.turbo = model_id.rstrip("/").endswith("sd-turbo")
+        self._sequence = 0
+        self._lock = threading.Lock()
+
+        if pipeline is not None:
+            self.pipeline = pipeline
+            self._torch = torch_module
+            self.device = device or "test"
+            return
         try:
             import torch
             from diffusers import AutoPipelineForImage2Image
+            from PIL import Image  # noqa: F401 - verify the complete runtime at startup
         except ImportError as error:
-            raise BackendUnavailable("diffusers backend requires torch, diffusers, and Pillow") from error
-        dtype = torch.float16 if torch.backends.mps.is_available() else torch.float32
-        self.pipeline = AutoPipelineForImage2Image.from_pretrained(model_id, torch_dtype=dtype)
-        self.pipeline.to("mps" if torch.backends.mps.is_available() else "cpu")
-
-    def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
+            raise BackendUnavailable("diffusers backend requires torch, diffusers, transformers, accelerate, and Pillow") from error
+        self._torch = torch
+        self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+        dtype = torch.float16 if self.device == "mps" else torch.float32
+        load_options = {"torch_dtype": dtype, "use_safetensors": True}
+        if dtype == torch.float16:
+            load_options["variant"] = "fp16"
         try:
-            from PIL import Image, ImageEnhance
+            self.pipeline = AutoPipelineForImage2Image.from_pretrained(model_load_source(model_id), **load_options)
+            self.pipeline.to(self.device)
+            if self.device == "mps" and os.environ.get("EVOLVING_ATTENTION_SLICING") == "1":
+                self.pipeline.enable_attention_slicing()
+        except Exception as error:
+            raise BackendUnavailable(f"could not load diffusion model {model_id}: {error}") from error
+
+    def health(self) -> dict[str, object]:
+        return {
+            "ok": True,
+            "backend": self.name,
+            "model": self.model_id,
+            "device": self.device,
+            "width": self.width,
+            "height": self.height,
+            "mediaType": "image/png",
+        }
+
+    def _source_image(self, state: dict[str, float], original: bytes | None, previous: bytes | None, settings: DiffusionSettings):
+        try:
+            from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
         except ImportError as error:
             raise BackendUnavailable("diffusers backend requires Pillow") from error
         if not original and not previous:
-            raise RequestError("diffusers mode requires EVOLVING_ORIGINAL_IMAGE or a previous generation")
-        original_image = Image.open(io.BytesIO(original or previous)).convert("RGB")
-        previous_image = Image.open(io.BytesIO(previous or original)).convert("RGB").resize(original_image.size)
-        # Low abstraction repeatedly anchors more strongly to the original.
-        source = Image.blend(original_image, previous_image, 0.25 + state["abstraction"] * 0.65)
-        source = ImageEnhance.Brightness(source).enhance(0.7 + state["brightness"] * 0.6)
-        strength = 0.18 + state["abstraction"] * 0.55 + state["motion"] * 0.08
-        output = self.pipeline(prompt=prompt_for(state), image=source, strength=min(.85, strength), guidance_scale=4 + state["tension"] * 4).images[0]
+            raise RequestError("diffusers mode requires an original image or a previous generation")
+        try:
+            original_image = Image.open(io.BytesIO(original or previous)).convert("RGB")
+            previous_image = Image.open(io.BytesIO(previous or original)).convert("RGB")
+        except (UnidentifiedImageError, OSError) as error:
+            raise RequestError(f"reference image could not be decoded: {error}") from error
+
+        size = (self.width, self.height)
+        original_image = ImageOps.fit(original_image, size, method=Image.Resampling.LANCZOS)
+        previous_image = ImageOps.fit(previous_image, size, method=Image.Resampling.LANCZOS)
+        source = Image.blend(previous_image, original_image, settings.original_weight)
+
+        # Brightness controls exposure; warmth scales red/blue color temperature.
+        source = ImageEnhance.Brightness(source).enhance(0.75 + state["brightness"] * 0.55)
+        red, green, blue = source.split()
+        warmth = state["warmth"] - 0.5
+        red = red.point(lambda value: max(0, min(255, value * (1.0 + warmth * 0.30))))
+        blue = blue.point(lambda value: max(0, min(255, value * (1.0 - warmth * 0.30))))
+        source = Image.merge("RGB", (red, green, blue))
+        # Tension controls local contrast in addition to prompt instability/guidance.
+        return ImageEnhance.Contrast(source).enhance(0.80 + state["tension"] * 0.65)
+
+    def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
+        with self._lock:
+            settings = diffusion_settings(state, self._sequence, self.turbo)
+            self._sequence += 1
+            source = self._source_image(state, original, previous, settings)
+            options = {
+                "prompt": prompt_for(state),
+                "image": source,
+                "strength": settings.strength,
+                "num_inference_steps": settings.num_inference_steps,
+                "guidance_scale": settings.guidance_scale,
+            }
+            if self._torch is not None:
+                options["generator"] = self._torch.Generator(device="cpu").manual_seed(settings.seed)
+            output = self.pipeline(**options).images[0].convert("RGB")
         encoded = io.BytesIO()
         output.save(encoded, format="PNG")
         return GenerationResult(encoded.getvalue(), "image/png", prompt_for(state))
 
 
 class GenerationStore:
-    def __init__(self, limit: int = 12):
+    def __init__(self, limit: int = DEFAULT_GENERATION_HISTORY_LIMIT):
+        if limit < 1:
+            raise ValueError("generation history limit must be positive")
         self._items: OrderedDict[str, bytes] = OrderedDict()
         self.limit = limit
+        self._lock = threading.Lock()
 
     def put(self, value: bytes) -> str:
         generation_id = uuid.uuid4().hex
-        self._items[generation_id] = value
-        while len(self._items) > self.limit:
-            self._items.popitem(last=False)
+        with self._lock:
+            self._items[generation_id] = value
+            while len(self._items) > self.limit:
+                self._items.popitem(last=False)
         return generation_id
 
     def get(self, generation_id: str | None) -> bytes | None:
-        return self._items.get(generation_id) if generation_id else None
+        if not generation_id:
+            return None
+        with self._lock:
+            value = self._items.get(generation_id)
+            if value is not None:
+                self._items.move_to_end(generation_id)
+            return value
 
 
 def handler_for(backend: VisualBackend, store: GenerationStore):
@@ -164,7 +299,8 @@ def handler_for(backend: VisualBackend, store: GenerationStore):
 
         def do_GET(self):
             if urlparse(self.path).path == "/health":
-                self._send(200, {"ok": True, "backend": backend.name})
+                health = getattr(backend, "health", None)
+                self._send(200, health() if health else {"ok": True, "backend": backend.name})
             else:
                 self._send(404, {"error": "not found"})
 
@@ -212,16 +348,20 @@ def configured_backend() -> VisualBackend:
     if mode == "mock":
         return MockBackend()
     if mode == "diffusers":
-        model_id = os.environ.get("EVOLVING_MODEL_ID")
-        if not model_id:
-            raise BackendUnavailable("EVOLVING_MODEL_ID is required for diffusers mode")
-        return DiffusersBackend(model_id)
+        model_id = os.environ.get("EVOLVING_MODEL_ID", DEFAULT_DIFFUSERS_MODEL)
+        try:
+            width = int(os.environ.get("EVOLVING_IMAGE_WIDTH", str(DEFAULT_IMAGE_SIZE)))
+            height = int(os.environ.get("EVOLVING_IMAGE_HEIGHT", str(DEFAULT_IMAGE_SIZE)))
+        except ValueError as error:
+            raise BackendUnavailable("EVOLVING_IMAGE_WIDTH and EVOLVING_IMAGE_HEIGHT must be integers") from error
+        return DiffusersBackend(model_id, width=width, height=height)
     raise BackendUnavailable(f"unknown EVOLVING_BACKEND: {mode}")
 
 
 if __name__ == "__main__":
-    service = create_server(port=int(os.environ.get("EVOLVING_VISUAL_PORT", "8000")), backend=configured_backend())
-    print(f"Evolving Impressionist visual service ({service.RequestHandlerClass.__name__}) listening on http://{service.server_address[0]}:{service.server_address[1]}", flush=True)
+    active_backend = configured_backend()
+    service = create_server(port=int(os.environ.get("EVOLVING_VISUAL_PORT", "8000")), backend=active_backend)
+    print(f"Evolving Impressionist visual service ({active_backend.name}) listening on http://{service.server_address[0]}:{service.server_address[1]}", flush=True)
     try:
         service.serve_forever()
     except KeyboardInterrupt:
