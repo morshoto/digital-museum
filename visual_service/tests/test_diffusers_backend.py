@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from visual_service.server import DiffusersBackend, diffusion_settings, model_load_source
+from visual_service.server import DriftConfiguration, DiffusersBackend, diffusion_settings, model_load_source
 
 
 VALID_STATE = {"brightness": .5, "warmth": .5, "abstraction": .3, "motion": .4, "tension": .2}
@@ -17,6 +17,7 @@ class DiffusionMappingTests(unittest.TestCase):
         active = diffusion_settings(dict(VALID_STATE, abstraction=.9, motion=.9), 0, turbo=True)
         self.assertGreater(active.strength, calm.strength)
         self.assertGreaterEqual(calm.num_inference_steps * calm.strength, 1)
+        self.assertLess(active.strength, .5)
 
     def test_turbo_uses_no_classifier_free_guidance(self):
         low = diffusion_settings(dict(VALID_STATE, tension=0), 0, turbo=True)
@@ -24,9 +25,23 @@ class DiffusionMappingTests(unittest.TestCase):
         self.assertEqual(low.guidance_scale, 0)
         self.assertEqual(high.guidance_scale, 0)
 
-    def test_original_anchor_never_falls_below_thirty_percent(self):
+    def test_original_anchor_never_falls_below_configured_high_abstraction_floor(self):
         settings = diffusion_settings(dict(VALID_STATE, abstraction=1), 0, turbo=True)
-        self.assertGreaterEqual(settings.original_weight, .30)
+        self.assertGreaterEqual(settings.original_weight, .50)
+
+    def test_low_abstraction_has_stronger_original_anchor(self):
+        low = diffusion_settings(dict(VALID_STATE, abstraction=0), 0, turbo=True)
+        high = diffusion_settings(dict(VALID_STATE, abstraction=1), 0, turbo=True)
+        self.assertGreater(low.original_weight, high.original_weight)
+
+    def test_every_fifth_generation_pulls_back_toward_original(self):
+        fourth = diffusion_settings(VALID_STATE, 3, turbo=True)
+        fifth = diffusion_settings(VALID_STATE, 4, turbo=True)
+        self.assertAlmostEqual(fifth.original_weight - fourth.original_weight, .10)
+
+    def test_drift_configuration_rejects_inverted_abstraction_mapping(self):
+        with self.assertRaisesRegex(RuntimeError, "low-abstraction original anchor"):
+            DriftConfiguration(original_anchor_low=.3, original_anchor_high=.6)
 
     def test_motion_and_sequence_change_seed(self):
         first = diffusion_settings(VALID_STATE, 0, turbo=True)
@@ -100,12 +115,34 @@ class DiffusersBackendTests(unittest.TestCase):
         self.assertEqual(backend.health(), {
             "ok": True,
             "backend": "diffusers",
-            "model": "stabilityai/sd-turbo",
+            "model": "stabilityai/sdxl-turbo",
             "device": "test-mps",
             "width": 64,
             "height": 72,
             "mediaType": "image/png",
+            "resizeMode": "center-crop",
+            "driftControl": {
+                "originalAnchorLowAbstraction": .72,
+                "originalAnchorHighAbstraction": .50,
+                "outputAnchorLowAbstraction": .16,
+                "outputAnchorHighAbstraction": .08,
+                "pullbackInterval": 5,
+                "pullbackBoost": .10,
+            },
         })
+
+    def test_final_grading_makes_brightness_and_warmth_visible(self):
+        neutral = Image.new("RGB", (8, 8), (120, 120, 120))
+        cool_dark = DiffusersBackend._grade_image(
+            neutral, dict(VALID_STATE, brightness=0, warmth=0)
+        )
+        warm_bright = DiffusersBackend._grade_image(
+            neutral, dict(VALID_STATE, brightness=1, warmth=1)
+        )
+        self.assertGreater(sum(warm_bright.getpixel((0, 0))), sum(cool_dark.getpixel((0, 0))))
+        warm_red, _, warm_blue = warm_bright.getpixel((0, 0))
+        cool_red, _, cool_blue = cool_dark.getpixel((0, 0))
+        self.assertGreater(warm_red - warm_blue, cool_red - cool_blue)
 
 
 if __name__ == "__main__":
