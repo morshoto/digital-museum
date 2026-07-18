@@ -1,4 +1,6 @@
 import base64
+from contextlib import redirect_stdout
+import io
 import json
 import threading
 import unittest
@@ -119,6 +121,35 @@ class VisualServiceTests(unittest.TestCase):
             self.assertEqual(context.exception.code, 500)
             body = json.load(context.exception)
             self.assertIn("generation failed: intentional backend failure", body["error"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_generation_rejection_logs_the_concrete_reason(self):
+        class RejectingBackend:
+            name = "diffusers"
+
+            def health(self):
+                return {"ok": True, "backend": self.name}
+
+            def generate(self, state, original, previous):
+                from visual_service.server import RequestError
+                raise RequestError("diffusers mode requires an original image or a previous generation")
+
+        output = io.StringIO()
+        server = create_server(port=0, backend=RejectingBackend())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}/generate"
+        payload = {"state": VALID_STATE, "reference": {"originalImagePath": None, "previousGenerationID": None}}
+        try:
+            with redirect_stdout(output), self.assertRaises(HTTPError) as context:
+                urlopen(Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}), timeout=2)
+            self.assertEqual(context.exception.code, 400)
+            self.assertIn(
+                "[visual-service] generation rejected: diffusers mode requires an original image or a previous generation",
+                output.getvalue(),
+            )
         finally:
             server.shutdown()
             server.server_close()

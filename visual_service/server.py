@@ -418,6 +418,13 @@ def handler_for(backend: VisualBackend, store: GenerationStore):
             self.end_headers()
             self.wfile.write(encoded)
 
+        def _reject_generation(self, status: int, reason: str):
+            # Rejections remain visible even when routine HTTP request logging
+            # is quiet. Never include the request body: it may grow to contain
+            # large image data in future API revisions.
+            print(f"[visual-service] generation rejected: {reason}", flush=True)
+            self._send(status, {"error": reason})
+
         def do_GET(self):
             if urlparse(self.path).path == "/health":
                 health = getattr(backend, "health", None)
@@ -449,13 +456,13 @@ def handler_for(backend: VisualBackend, store: GenerationStore):
                     },
                 })
             except (RequestError, ValueError, TypeError, json.JSONDecodeError) as error:
-                self._send(400, {"error": str(error)})
+                self._reject_generation(400, str(error))
             except FileNotFoundError as error:
-                self._send(400, {"error": f"reference image not found: {error.filename}"})
+                self._reject_generation(400, f"reference image not found: {error.filename}")
             except BackendUnavailable as error:
-                self._send(503, {"error": str(error)})
+                self._reject_generation(503, str(error))
             except Exception as error:
-                self._send(500, {"error": f"generation failed: {error}"})
+                self._reject_generation(500, f"generation failed: {error}")
 
         def log_message(self, format, *args):
             if os.environ.get("EVOLVING_QUIET") != "1":

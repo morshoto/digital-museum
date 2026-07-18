@@ -57,16 +57,21 @@ never stretched. The default exactly matches a 16:9 installation display;
 override both dimensions for another display ratio. `EVOLVING_ATTENTION_SLICING=1`
 trades speed for lower peak memory pressure on smaller Macs.
 
-Pass an original painting path to Swift:
+Swift selects the bundled Monet *Water Lilies* reference automatically and
+passes its SwiftPM resource-bundle filesystem path to this service:
 
 ```sh
-EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg \
 swift run EvolvingImpressionist
 ```
 
-The path is read by the local Python service. The Swift request also carries
-the prior `generationID`, allowing the service to combine the original and
-previous generated raster on later cycles.
+Set `EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.png` on the Swift
+process to explicitly override that selection. A configured path must resolve
+to a readable file; Swift surfaces a configuration error and does not silently
+fall back if it does not. The selected path is read by the local Python
+service. The Swift request also carries the prior `generationID`, allowing the
+service to combine the persistent original anchor and previous generated raster
+on later cycles. The Diffusers validation requiring one of those references is
+unchanged.
 
 Generated raster history is a thread-safe, bounded LRU containing at most 16
 frames. The normal chain only needs the latest predecessor; the additional
@@ -161,11 +166,13 @@ Verify the same real responses through Swift and AppKit:
 ```sh
 VISUAL_SERVICE_URL=http://127.0.0.1:8000 \
 EXPECTED_VISUAL_BACKEND=diffusers \
-EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg \
 swift run EvolvingImpressionistVerify
 ```
 
 The service converts invalid references into controlled JSON errors. Swift's
+HTTP diagnostics retain both the concrete server error and a bounded copy of
+the response body; rejected-generation logs never include request/image
+payloads. Swift's
 `VisualService` changes `currentImage` and `previousGenerationID` only after a
 response has decoded successfully, so an HTTP/model/decode failure preserves
 the last valid frame. Selecting `EVOLVING_BACKEND=mock` remains the explicit,

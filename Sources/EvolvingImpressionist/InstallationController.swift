@@ -48,10 +48,13 @@ final class InstallationController: ObservableObject {
         let values = WorldParameter.allCases
             .map { "\($0.rawValue)=\(String(format: "%.6f", state[$0]))" }
             .joined(separator: " ")
+        let error = visual.lastError
+            .map { String($0.prefix(2_000)).replacingOccurrences(of: "\n", with: " ") }
+            ?? "none"
         print(
             "[installation] generations_ok=\(visual.generationSuccessCount) " +
             "generations_failed=\(visual.generationFailureCount) " +
-            "osc_sent=\(osc.sentMessageCount) \(values)"
+            "osc_sent=\(osc.sentMessageCount) \(values) error=\(error)"
         )
         fflush(stdout)
     }

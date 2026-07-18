@@ -88,11 +88,23 @@ backend name, prompt, a generation ID, and backend-neutral flags confirming
 which requested references were resolved. The service retains a bounded cache
 of recent frames so each generation can use its predecessor.
 
-To anchor mock or real generations to an original painting:
+Swift automatically anchors mock and real generations to the bundled Monet
+*Water Lilies* (1906) reference. The catalog and CC0/public-domain provenance
+for all four bundled paintings live in
+[`Sources/EvolvingImpressionistCore/Resources/Paintings`](Sources/EvolvingImpressionistCore/Resources/Paintings/README.md).
+No original-image environment variable is required:
 
 ```sh
-EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg swift run EvolvingImpressionist
+swift run EvolvingImpressionist
 ```
+
+Set `EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.png` only to override
+the bundled default. Swift validates an explicit override before sending any
+generation request and reports an actionable error instead of silently falling
+back when the file is missing or unreadable. SwiftPM copies the painting
+directory into `EvolvingImpressionistCore`'s resource bundle; `Bundle.module`
+provides the real filesystem URL passed to the local Python process, so runtime
+resolution never depends on the current working directory.
 
 To install and use the real backend:
 
@@ -337,7 +349,7 @@ config file. Export stable site values in the operator shell or launch wrapper.
 | `EVOLVING_MODEL_ID` | `stabilityai/sd-turbo` | Hugging Face ID or local Diffusers directory containing `model_index.json`. |
 | `EVOLVING_VISUAL_HOST` / `EVOLVING_VISUAL_PORT` | `127.0.0.1` / `8000` | Visual service listener. |
 | `EVOLVING_VISUAL_URL` | derived from host/port | URL passed to Swift and used for health checks. |
-| `EVOLVING_ORIGINAL_IMAGE` | unset | Optional readable original painting path. |
+| `EVOLVING_ORIGINAL_IMAGE` | bundled Monet *Water Lilies* | Optional readable original painting override; an invalid explicit path fails closed. |
 | `EVOLVING_IMAGE_WIDTH` / `EVOLVING_IMAGE_HEIGHT` | `512` / `512` | Diffusers output dimensions; multiples of eight. |
 | `EVOLVING_ATTENTION_SLICING` | `0` | Set `1` to lower peak model memory at a speed cost. |
 | `EVOLVING_OSC_HOST` / `EVOLVING_OSC_PORT` | `127.0.0.1` / `57120` | Swift WorldState destination and sclang language port. |

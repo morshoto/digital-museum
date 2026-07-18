@@ -294,6 +294,17 @@ struct VerificationRunner {
         let client = VisualAPIClient(baseURL: url)
         let health = try await client.health()
         try require(health.ok && health.backend == expectedBackend, "\(expectedBackend) health response was invalid")
+        do {
+            _ = try await client.generate(.init(
+                state: .init(brightness: 0.3, warmth: 1.2, abstraction: 0.2, motion: 0.5, tension: 0.1),
+                reference: .init(originalImagePath: originalImagePath)
+            ))
+            throw VerificationFailure(description: "invalid WorldState unexpectedly succeeded")
+        } catch VisualAPIError.httpStatus(let status, let detail) {
+            try require(status == 400, "invalid WorldState returned HTTP \(status), expected 400")
+            try require(detail.contains("warmth must be within 0...1"), "Swift omitted the server validation message")
+            try require(detail.contains("Response body:"), "Swift omitted the non-2xx response body from diagnostics")
+        }
         let first = try await client.generate(.init(
             state: .init(brightness: 0.3, warmth: 0.4, abstraction: 0.2, motion: 0.5, tension: 0.1),
             reference: .init(originalImagePath: originalImagePath)
