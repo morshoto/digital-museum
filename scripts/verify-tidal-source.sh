@@ -3,6 +3,7 @@ set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tidal_source="$repo_dir/tidal/EvolvingImpressionist.hs"
+artistic_vectors="$repo_dir/verification/artistic_state_vectors.json"
 tidal_data_dir=$(ghc-pkg field tidal data-dir | sed -n 's/^data-dir: //p')
 boot_tidal="$tidal_data_dir/BootTidal.hs"
 input_file=$(mktemp /tmp/evolving-impressionist-tidal-input.XXXXXX)
@@ -13,10 +14,15 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-for quality in worldLuminosity worldFluidity worldInstability worldSerenity worldDensity; do
-    occurrences=$(grep -o "$quality" "$tidal_source" | wc -l | tr -d ' ')
-    if [ "$occurrences" -lt 2 ]; then
-        printf 'FAIL: %s is defined but not consumed by a Tidal pattern\n' "$quality" >&2
+for mapping in \
+    'lpf.*worldLuminosity' \
+    'room.*worldFluidity' \
+    'sometimesBy worldInstability' \
+    'legato.*worldSerenity' \
+    'fast .*worldDensity'
+do
+    if ! grep -Eq "^[[:space:]]*[^-].*$mapping" "$tidal_source"; then
+        printf 'FAIL: Tidal pattern does not consume expected mapping: %s\n' "$mapping" >&2
         exit 1
     fi
 done
@@ -27,6 +33,7 @@ awk '
     { print }
     END { if (in_pattern) print ":}"; print "hush" }
 ' "$tidal_source" >"$input_file"
+python3 "$repo_dir/scripts/render-artistic-vector-assertions.py" "$artistic_vectors" >>"$input_file"
 
 if ! ghci -v0 -ghci-script "$boot_tidal" <"$input_file" >"$output_file" 2>&1; then
     cat "$output_file"

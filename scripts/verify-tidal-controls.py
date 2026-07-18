@@ -7,8 +7,14 @@ import argparse
 import select
 import socket
 import struct
+import sys
 import time
 from collections import defaultdict
+from pathlib import Path
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from visual_service.server import artistic_state  # noqa: E402
 
 
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
@@ -17,13 +23,7 @@ PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
 def derived(selected: str, value: float) -> dict[str, float]:
     state = {parameter: 0.5 for parameter in PARAMETERS}
     state[selected] = value
-    return {
-        "luminosity": .70 * state["brightness"] + .30 * state["warmth"],
-        "fluidity": .65 * state["motion"] + .35 * state["abstraction"],
-        "instability": .65 * state["tension"] + .35 * state["abstraction"],
-        "serenity": 1 - (.55 * state["tension"] + .25 * state["motion"] + .20 * state["abstraction"]),
-        "density": .60 * state["motion"] + .25 * state["abstraction"] + .15 * state["tension"],
-    }
+    return artistic_state(state).__dict__
 
 
 def mapped(low: float, high: float, value: float) -> float:

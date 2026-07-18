@@ -13,21 +13,15 @@ import time
 from urllib.request import Request, urlopen
 
 
-STATES = {
-    "A-calm-dark": {"brightness": .15, "warmth": .20, "abstraction": .10, "motion": .10, "tension": .08},
-    "B-luminous-fluid": {"brightness": .88, "warmth": .82, "abstraction": .38, "motion": .78, "tension": .18},
-    "C-tense-abstract": {"brightness": .42, "warmth": .35, "abstraction": .92, "motion": .88, "tension": .90},
-}
+DEFAULT_VECTORS = Path(__file__).resolve().parents[1] / "verification" / "artistic_state_vectors.json"
 
 
-def artistic(state: dict[str, float]) -> dict[str, float]:
-    return {
-        "luminosity": .70 * state["brightness"] + .30 * state["warmth"],
-        "fluidity": .65 * state["motion"] + .35 * state["abstraction"],
-        "instability": .65 * state["tension"] + .35 * state["abstraction"],
-        "serenity": 1 - (.55 * state["tension"] + .25 * state["motion"] + .20 * state["abstraction"]),
-        "density": .60 * state["motion"] + .25 * state["abstraction"] + .15 * state["tension"],
-    }
+def calibration_vectors(path: Path) -> list[tuple[str, dict[str, float], dict[str, float]]]:
+    vectors = json.loads(path.read_text())
+    selected = [vector for vector in vectors if vector["name"][0:2] in {"A-", "B-", "C-"}]
+    if len(selected) != 3:
+        raise ValueError("shared vectors must contain exactly one A, B, and C calibration state")
+    return [(vector["name"], vector["input"], vector["expected"]) for vector in selected]
 
 
 def osc_string(value: str) -> bytes:
@@ -80,25 +74,27 @@ def main() -> None:
     parser.add_argument("--visual-url")
     parser.add_argument("--original")
     parser.add_argument("--output-dir", type=Path, default=Path("/tmp/evolving-phase-c-visuals"))
+    parser.add_argument("--vectors", type=Path, default=DEFAULT_VECTORS)
     parser.add_argument("--no-stop", action="store_true")
     args = parser.parse_args()
 
+    items = calibration_vectors(args.vectors)
     previous = None
     if args.visual_url:
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        for index, (name, state) in enumerate(STATES.items(), 1):
-            suffix = ".png" if "diffus" in json.load(urlopen(f"{args.visual_url.rstrip('/')}/health"))["backend"] else ".svg"
+        with urlopen(f"{args.visual_url.rstrip('/')}/health", timeout=5) as response:
+            suffix = ".png" if "diffus" in json.load(response)["backend"] else ".svg"
+        for index, (name, state, _) in enumerate(items, 1):
             previous = generate_visual(args.visual_url, args.output_dir / f"{index}-{name}{suffix}", args.original, previous, state)
 
     target = (args.host, args.port)
-    items = list(STATES.items())
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        for name, state in items:
-            print(f"phase={name} raw={state} artistic={artistic(state)}", flush=True)
+        for name, state, expected in items:
+            print(f"phase={name} raw={state} artistic={expected}", flush=True)
             hold_state(sock, target, name, state, args.hold_seconds)
 
         sock.sendto(osc_message("/verification/phase", "continuous-A-B-C-A"), target)
-        for (_, start), (_, end) in zip(items, items[1:] + items[:1]):
+        for (_, start, _), (_, end, _) in zip(items, items[1:] + items[:1]):
             steps = max(1, round(args.transition_seconds * 20))
             for step in range(steps):
                 send_state(sock, target, interpolate(start, end, step / steps))

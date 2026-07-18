@@ -7,6 +7,12 @@ private struct VerificationFailure: Error, CustomStringConvertible {
     let description: String
 }
 
+private struct ArtisticStateVector: Decodable {
+    let name: String
+    let input: WorldState
+    let expected: ArtisticState
+}
+
 private final class OSCCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var messages: [(String, Float)] = []
@@ -158,7 +164,33 @@ struct VerificationRunner {
         try require(tense.instability > baseline.artistic.instability && tense.serenity < baseline.artistic.serenity, "tension did not raise instability and lower serenity")
         let abstract = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 1, motion: 0.5, tension: 0.5).artistic
         try require(abstract.fluidity > baseline.artistic.fluidity && abstract.instability > baseline.artistic.instability && abstract.density > baseline.artistic.density, "abstraction did not affect its intended qualities")
-        print("PASS: deterministic bounded artistic state and expected raw-to-derived relationships")
+
+        let sourceFile = URL(fileURLWithPath: #filePath)
+        let defaultVectorsURL = sourceFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("verification/artistic_state_vectors.json")
+        let vectorsURL = ProcessInfo.processInfo.environment["ARTISTIC_STATE_VECTORS"]
+            .map { URL(fileURLWithPath: $0) } ?? defaultVectorsURL
+        let vectors = try JSONDecoder().decode(
+            [ArtisticStateVector].self,
+            from: Data(contentsOf: vectorsURL)
+        )
+        try require(!vectors.isEmpty, "artistic-state golden vectors were empty")
+        for vector in vectors {
+            let actual = vector.input.artistic
+            for (name, actualValue, expectedValue) in [
+                ("luminosity", actual.luminosity, vector.expected.luminosity),
+                ("fluidity", actual.fluidity, vector.expected.fluidity),
+                ("instability", actual.instability, vector.expected.instability),
+                ("serenity", actual.serenity, vector.expected.serenity),
+                ("density", actual.density, vector.expected.density),
+            ] {
+                try require(abs(actualValue - expectedValue) < 0.000000001, "\(vector.name) \(name) drifted from the shared golden vector")
+            }
+        }
+        print("PASS: deterministic bounded artistic state, directional relationships, and \(vectors.count) shared golden vectors")
     }
 
     private static func requireValue<T>(_ value: T?, _ message: String) throws -> T {

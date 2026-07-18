@@ -4,7 +4,13 @@
 
 setcps (112/60/4)
 
-let worldBrightness  = cF 0.5 "brightness"
+let artisticLuminosity brightness warmth = 0.70 * brightness + 0.30 * warmth
+    artisticFluidity motion abstraction = 0.65 * motion + 0.35 * abstraction
+    artisticInstability tension abstraction = 0.65 * tension + 0.35 * abstraction
+    artisticSerenity tension motion abstraction = 1 - (0.55 * tension + 0.25 * motion + 0.20 * abstraction)
+    artisticDensity motion abstraction tension = 0.60 * motion + 0.25 * abstraction + 0.15 * tension
+
+    worldBrightness  = cF 0.5 "brightness"
     worldWarmth      = cF 0.5 "warmth"
     worldAbstraction = cF 0.3 "abstraction"
     worldMotion      = cF 0.4 "motion"
@@ -13,11 +19,11 @@ let worldBrightness  = cF 0.5 "brightness"
 -- These are the same bounded deterministic artistic-state equations used by
 -- Swift and the visual service. The bridge remains compatible: only the five
 -- original controls cross OSC, and Tidal derives these continuously.
-    worldLuminosity  = 0.70 * worldBrightness + 0.30 * worldWarmth
-    worldFluidity    = 0.65 * worldMotion + 0.35 * worldAbstraction
-    worldInstability = 0.65 * worldTension + 0.35 * worldAbstraction
-    worldSerenity    = 1 - (0.55 * worldTension + 0.25 * worldMotion + 0.20 * worldAbstraction)
-    worldDensity     = 0.60 * worldMotion + 0.25 * worldAbstraction + 0.15 * worldTension
+    worldLuminosity  = artisticLuminosity <$> worldBrightness <*> worldWarmth
+    worldFluidity    = artisticFluidity <$> worldMotion <*> worldAbstraction
+    worldInstability = artisticInstability <$> worldTension <*> worldAbstraction
+    worldSerenity    = artisticSerenity <$> worldTension <*> worldMotion <*> worldAbstraction
+    worldDensity     = artisticDensity <$> worldMotion <*> worldAbstraction <*> worldTension
 
 -- Luminosity opens the spectrum; fluidity changes
 -- phrasing; instability mutates the motif. Raw warmth retains its compatible

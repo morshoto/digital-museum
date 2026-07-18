@@ -1,4 +1,5 @@
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -12,6 +13,15 @@ VALID_STATE = {"brightness": .5, "warmth": .5, "abstraction": .3, "motion": .4, 
 
 
 class DiffusionMappingTests(unittest.TestCase):
+    def test_artistic_state_matches_shared_golden_vectors(self):
+        vectors_path = Path(__file__).resolve().parents[2] / "verification" / "artistic_state_vectors.json"
+        vectors = json.loads(vectors_path.read_text())
+        self.assertTrue(vectors)
+        for vector in vectors:
+            actual = artistic_state(vector["input"])
+            for name, expected in vector["expected"].items():
+                self.assertAlmostEqual(getattr(actual, name), expected, places=9, msg=f"{vector['name']} {name}")
+
     def test_artistic_state_is_bounded_and_deterministic(self):
         for state in (
             {key: 0 for key in VALID_STATE},
