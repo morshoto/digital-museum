@@ -1,11 +1,21 @@
 import AppKit
 import Foundation
 
+public struct VisualFrame {
+    public let currentImage: NSImage?
+    public let previousImage: NSImage?
+    public let transitionID: Int
+
+    public init(currentImage: NSImage? = nil, previousImage: NSImage? = nil, transitionID: Int = 0) {
+        self.currentImage = currentImage
+        self.previousImage = previousImage
+        self.transitionID = transitionID
+    }
+}
+
 @MainActor
 public final class VisualService: ObservableObject {
-    @Published public private(set) var currentImage: NSImage?
-    @Published public private(set) var previousImage: NSImage?
-    @Published public private(set) var transitionID = 0
+    @Published public private(set) var frame = VisualFrame()
     @Published public private(set) var lastPrompt = ""
     @Published public private(set) var isGenerating = false
     @Published public private(set) var status: TransportStatus = .idle
@@ -17,6 +27,10 @@ public final class VisualService: ObservableObject {
 
     private let client: any VisualAPIProviding
     private let originalImagePath: String?
+
+    public var currentImage: NSImage? { frame.currentImage }
+    public var previousImage: NSImage? { frame.previousImage }
+    public var transitionID: Int { frame.transitionID }
 
     public convenience init(
         baseURL: URL = URL(string: ProcessInfo.processInfo.environment["EVOLVING_VISUAL_URL"] ?? "http://127.0.0.1:8000")!,
@@ -53,15 +67,20 @@ public final class VisualService: ObservableObject {
             guard let data = response.imageData, let image = NSImage(data: data) else {
                 throw VisualAPIError.invalidImageData
             }
-            previousImage = currentImage
-            currentImage = image
+            let nextFrame = VisualFrame(
+                currentImage: image,
+                previousImage: frame.currentImage,
+                transitionID: frame.transitionID + 1
+            )
             previousGenerationID = response.generationID
             lastPrompt = response.prompt
             backend = response.backend
             lastError = nil
             status = .ready
             generationSuccessCount += 1
-            transitionID += 1
+            // Publish image data and identity together so SwiftUI cannot render
+            // a new image using the outgoing frame's transition identity.
+            frame = nextFrame
         } catch {
             // Retain the last valid frame and retry on the controller's next cycle.
             status = .failed(error.localizedDescription)
