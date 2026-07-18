@@ -135,7 +135,7 @@ fi
 if [ -n "${EVOLVING_ORIGINAL_IMAGE:-}" ]; then
     if [ -r "$EVOLVING_ORIGINAL_IMAGE" ]; then required_ok "original image $EVOLVING_ORIGINAL_IMAGE"; else required_fail "EVOLVING_ORIGINAL_IMAGE is not readable"; fi
 else
-    bundled_reference=$(find "$repo_dir/.build/release" -path '*/Paintings/monet-water-lilies.png' -type f -print -quit 2>/dev/null || true)
+    bundled_reference=$(find -H "$repo_dir/.build/release" -path '*/Paintings/monet-water-lilies.png' -type f -print -quit 2>/dev/null || true)
     if [ -n "$bundled_reference" ] && [ -r "$bundled_reference" ]; then
         required_ok "bundled default original image $bundled_reference"
     else
