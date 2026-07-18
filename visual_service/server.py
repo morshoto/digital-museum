@@ -137,7 +137,10 @@ def diffusion_settings(state: dict[str, float], sequence: int, turbo: bool) -> D
 
 def model_load_source(model_id: str) -> str:
     """Resolve a downloaded Hub ID to its concrete snapshot in offline mode."""
-    if Path(model_id).expanduser().exists() or os.environ.get("HF_HUB_OFFLINE") != "1" or "/" not in model_id:
+    expanded = Path(model_id).expanduser()
+    if expanded.exists():
+        return str(expanded)
+    if os.environ.get("HF_HUB_OFFLINE") != "1" or "/" not in model_id:
         return model_id
     default_home = Path.home() / ".cache" / "huggingface"
     hub_root = Path(os.environ.get("HF_HUB_CACHE", Path(os.environ.get("HF_HOME", default_home)) / "hub"))

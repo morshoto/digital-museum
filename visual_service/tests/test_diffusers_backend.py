@@ -46,6 +46,13 @@ class DiffusionMappingTests(unittest.TestCase):
             with patch.dict(os.environ, {"HF_HUB_OFFLINE": "1", "HF_HUB_CACHE": directory}):
                 self.assertEqual(model_load_source("example/model"), str(snapshot))
 
+    def test_existing_tilde_model_path_returns_expanded_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "models" / "local-model"
+            model.mkdir(parents=True)
+            with patch.dict(os.environ, {"HOME": directory}):
+                self.assertEqual(model_load_source("~/models/local-model"), str(model))
+
 
 try:
     from PIL import Image
