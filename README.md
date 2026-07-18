@@ -21,8 +21,8 @@ music control over OSC.
   by `.python-version`, `pyproject.toml`, and `uv.lock`.
 - Optional for music: Nix, Homebrew SuperCollider, SuperDirt, SC3-Plugins, and
   suitable samples. `flake.nix` pins GHC, Cabal, and TidalCycles.
-- Optional for real images: the `diffusion` project extra and approximately
-  5 GB of free runtime memory for the proven SD-Turbo/MPS path.
+- Optional for real images: the `diffusion` project extra and enough free
+  unified memory for the SDXL Turbo/MPS path (see the recorded measurements).
 
 ## Run the MVP
 
@@ -86,17 +86,19 @@ EVOLVING_BACKEND=diffusers \
 uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
-The proven default is `stabilityai/sd-turbo` at 512×512 on Apple Silicon MPS.
-The backend derives luminosity, fluidity, instability, serenity, and density
-from the five raw values. Those qualities jointly drive exposure, Img2Img
-strength, contrast/guidance, original anchoring, texture, and prompt language;
-raw warmth retains precise color-temperature control. Swift remains coupled
-only to the unchanged HTTP contract. Raw abstraction remains the hard upper
-bound on visual divergence, while the artistic qualities determine how change
-appears within that bound. See
-[`docs/SHARED_ARTISTIC_STATE.md`](docs/SHARED_ARTISTIC_STATE.md) for the audit,
-equations, mapping tables, response timing, and calibration states, and
-[`visual_service/README.md`](visual_service/README.md) for backend setup.
+The quality-oriented default is `stabilityai/sdxl-turbo` at 1024×576 on Apple
+Silicon MPS, matching the attached 1920×1080 installation display's 16:9 ratio.
+The backend continuously combines the original with the previous frame, pulls
+back more strongly every fifth frame, and applies a small post-generation
+original anchor. The five raw values derive luminosity, fluidity, instability,
+serenity, and density for shared visual/music behavior. Raw `abstraction`
+remains the hard upper bound on visual divergence, while those qualities shape
+change inside the bound through strength headroom, guidance, anchoring, prompt
+language, and deterministic finishing. Swift remains coupled only to the
+unchanged HTTP contract. See
+[`docs/SHARED_ARTISTIC_STATE.md`](docs/SHARED_ARTISTIC_STATE.md) for the shared
+model and [`visual_service/README.md`](visual_service/README.md) for visual
+configuration and drift control.
 
 ## OSC, SuperCollider, and TidalCycles
 
@@ -252,7 +254,7 @@ from its `31`, `71`, and `607` second defaults in `WorldState.swift`. Individual
 short components repeat within an hour, but their differently phased secondary
 and low-frequency components do not realign with them during that window.
 
-The real SD-Turbo/MPS run, sequential identifiers, timings, memory footprint,
+The real SDXL Turbo/MPS run, sequential identifiers, timings, memory footprint,
 controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 [`visual_service/VERIFICATION.md`](visual_service/VERIFICATION.md).
 
@@ -262,8 +264,9 @@ controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 - The real Diffusers path is an opt-in `uv` extra because its pinned packages
   and model cache are several gigabytes; `scripts/verify.sh` syncs only the
   dependency-free mock environment.
-- SD-Turbo is selected for pipeline proof and speed, not maximum image quality.
-  Its output is square and its prompt fidelity is below larger current models.
+- SDXL Turbo balances painterly quality and repeated-generation latency on the
+  installation's Apple Silicon hardware; it is not equivalent to a slower
+  full-step SDXL fine-art checkpoint.
 - The selected model configuration has no safety checker. Keep the localhost
   service private and review the model license before public deployment.
 - Physical speaker audibility remains an operator check even though the live

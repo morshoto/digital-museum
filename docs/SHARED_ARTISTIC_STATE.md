@@ -75,18 +75,20 @@ Diffusion strength and source anchoring apply the following additional
 constraints:
 
 ```text
-base_strength = 0.25 + 0.40 * abstraction
-modifier = 0.08 * fluidity + 0.05 * instability
-strength_cap = 0.30 + 0.48 * abstraction
-strength = min(strength_cap, base_strength + modifier)
+base_strength = 0.25 + 0.18 * abstraction
+modifier = 0.03 * fluidity + 0.02 * instability
+strength_cap = 0.30 + 0.19 * abstraction
+strength = min(0.49, strength_cap, base_strength + modifier)
 
-abstraction_anchor = 0.55 - 0.25 * abstraction
-serenity_anchor = 0.30 + 0.25 * serenity
-original_weight = max(abstraction_anchor, serenity_anchor)
+abstraction_anchor = interpolate(configured_low, configured_high, abstraction)
+original_weight = min(0.90, abstraction_anchor + 0.04 * serenity)
 ```
 
 Consequently, `abstraction = 0` caps strength at `0.30` and retains at least
-55% of the original even when motion and tension are both maximal.
+the configured low-abstraction anchor (72% by default) even when motion and
+tension are both maximal. The visual-coherence layer also applies its periodic
+pull-back and bounded post-generation original blend; derived qualities cannot
+weaken either abstraction-based constraint.
 
 ## Music mapping
 

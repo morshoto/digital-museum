@@ -1,13 +1,15 @@
 # Phase C audiovisual verification
 
-Verified on 2026-07-18 on Apple Silicon macOS. The test used the real cached
-SD-Turbo/MPS backend, TidalCycles 1.10.1, SuperDirt 1.7.3, SuperCollider 3.14.1,
-and the Mac mini speaker output selected at 48 kHz.
+Verified on 2026-07-18 on Apple Silicon macOS. The original Phase C live test
+used the then-current cached SD-Turbo/MPS backend, TidalCycles 1.10.1,
+SuperDirt 1.7.3, SuperCollider 3.14.1, and the Mac mini speaker output selected
+at 48 kHz. Current visual-coherence defaults and their separate real-backend
+evidence are recorded in [`../visual_service/VERIFICATION.md`](../visual_service/VERIFICATION.md).
 
 ## Automated regression
 
-`./scripts/verify.sh` passed 26 Python tests in the dependency-free environment
-(three Pillow-only backend tests skipped), all Swift build and executable
+`./scripts/verify.sh` passed 30 Python tests in the dependency-free environment
+(four Pillow-only backend tests skipped), all Swift build and executable
 checks, two mock visual generations and failure recovery, all five original
 OSC addresses through a local UDP receiver, both Tidal patterns evaluated in
 the pinned GHCi environment, and all five paths through the real SuperCollider
@@ -91,9 +93,8 @@ held phase, then judge the continuous transition in the room. Do not evaluate
 
 - Warmth still uses a raw-value timbral crossfade because it is a useful stable
   compatibility mapping; luminosity supplies the higher-level coupling.
-- SD-Turbo prompt fidelity and its low effective denoising-step count limit
-  subtle deformation control. Model selection and resolution are outside this
-  phase.
+- Turbo prompt fidelity and its low effective denoising-step count limit subtle
+  deformation control. Model selection and resolution remain outside Phase C.
 - Tidal's control reads are continuous, but probabilistic `sometimesBy`
   outcomes are pattern-cycle dependent; instability is perceptible over a
   phrase rather than guaranteed on each event.
