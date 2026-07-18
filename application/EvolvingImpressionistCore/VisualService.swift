@@ -28,6 +28,7 @@ public final class VisualService: ObservableObject {
     private let client: any VisualAPIProviding
     private let originalImagePath: String?
     private let referenceConfigurationError: String?
+    private let paintingWorld: PaintingWorldController?
 
     public var currentImage: NSImage? { frame.currentImage }
     public var previousImage: NSImage? { frame.previousImage }
@@ -38,7 +39,14 @@ public final class VisualService: ObservableObject {
     ) {
         do {
             let resolution = try OriginalImageResolver.resolve()
-            self.init(client: VisualAPIClient(baseURL: baseURL), originalImagePath: resolution.fileURL.path)
+            let paintingWorld = resolution.source == .bundledPainting
+                ? PaintingWorldController(catalog: try PaintingCatalog.loadBundled())
+                : nil
+            self.init(
+                client: VisualAPIClient(baseURL: baseURL),
+                originalImagePath: resolution.fileURL.path,
+                paintingWorld: paintingWorld
+            )
         } catch {
             self.init(
                 client: VisualAPIClient(baseURL: baseURL),
@@ -51,11 +59,13 @@ public final class VisualService: ObservableObject {
     public init(
         client: any VisualAPIProviding,
         originalImagePath: String?,
-        referenceConfigurationError: String? = nil
+        referenceConfigurationError: String? = nil,
+        paintingWorld: PaintingWorldController? = nil
     ) {
         self.client = client
         self.originalImagePath = originalImagePath
         self.referenceConfigurationError = referenceConfigurationError
+        self.paintingWorld = paintingWorld
         if let referenceConfigurationError {
             status = .failed(referenceConfigurationError)
             lastError = referenceConfigurationError
@@ -90,8 +100,12 @@ public final class VisualService: ObservableObject {
         }
         isGenerating = true
         defer { isGenerating = false }
-        let reference = VisualReference(originalImagePath: originalImagePath, previousGenerationID: previousGenerationID)
         do {
+            let preparedAnchor = try paintingWorld?.prepare()
+            let reference = VisualReference(
+                originalImagePath: preparedAnchor?.fileURL.path ?? originalImagePath,
+                previousGenerationID: previousGenerationID
+            )
             let response = try await client.generate(.init(state: state, reference: reference))
             guard let data = response.imageData, let image = NSImage(data: data) else {
                 throw VisualAPIError.invalidImageData
@@ -107,6 +121,7 @@ public final class VisualService: ObservableObject {
             lastError = nil
             status = .ready
             generationSuccessCount += 1
+            if let preparedAnchor { paintingWorld?.commit(preparedAnchor) }
             // Publish image data and identity together so SwiftUI cannot render
             // a new image using the outgoing frame's transition identity.
             frame = nextFrame

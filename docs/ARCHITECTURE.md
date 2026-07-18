@@ -18,18 +18,46 @@ Generation requests include those parameters, `originalImagePath`, and
 `previousGenerationID`; responses include a bounded generation ID, PNG data,
 backend identity, prompt, and reference-resolution flags.
 
-The first generation combines the bundled original painting with WorldState.
-Later generations combine the same original, the previous generation, and the
-current WorldState. The original remains a persistent drift-control anchor and
-is never replaced by only the previous frame.
+The first generation combines the active bundled painting anchor with
+WorldState. Later generations combine that anchor, the previous generation,
+and the current WorldState. The active original remains a persistent
+drift-control anchor and is never replaced by only the previous frame.
 
-Swift resolves `EVOLVING_ORIGINAL_IMAGE` first as a fail-closed override. When
-it is unset, `PaintingCatalog` selects Monet's *Water Lilies* (1906) from the
-SwiftPM resource bundle. `Bundle.module` provides a real filesystem URL that
-the local Python process can read independently of the working directory.
+The persistent Diffusers pipeline is a continuous generation engine. Swift
+starts at most one request every five seconds, and `VisualService` rejects
+overlap rather than building a queue. Each request samples the newest
+`WorldState` at its start and references both the original painting and the
+last successful generation. Failures retain that generation and the next
+interval retries from the same valid predecessor.
+
+`VisualService` publishes each decoded result as one atomic `VisualFrame`.
+`VisualTransitionTimeline` independently retains the visible keyframe mixture,
+transition start, normalized progress, and newest target. SwiftUI samples it at
+display cadence and uses a 1.2-second smootherstep blend. Interrupted
+transitions freeze their current layer weights before accepting a newer target,
+so stale arrivals cannot reset opacity or blank the display.
+
+The presentation transform is optional: zero `motion` produces no transform,
+while higher values remain inside a `1.000...1.002` scale and one-point offset
+envelope. `tension` only adds a small deterministic second harmonic. The same
+transform applies to the complete composite. Diffusion frames—not camera
+movement—carry the visible evolution.
+
+Swift resolves `EVOLVING_ORIGINAL_IMAGE` first as a fail-closed, fixed-anchor
+override. When unset, the shared `PaintingCatalog` starts with Monet's *Water
+Lilies* (1906), then retains each painting world for 24–96 successful
+generations. A stable rotation avoids consecutive works by the same artist.
+Six generation anchors use a smootherstep mixture to enter the next world;
+previous-frame feedback continues without interruption. AppKit composites only
+those bridge anchors, while settled worlds use their source files directly.
+
+The Python service reads the same catalog beside the resource images to apply
+the active profiles' subject, palette, brush, and structure prompt bias. A 12%
+profile state bias remains capped at 20% and never changes transported
+WorldState or audio. See [ADR 0002](adr/0002-impressionist-painting-worlds.md).
 
 The SDXL Turbo backend blends original and previous inputs, pulls more strongly
-toward the original every fifth frame, and applies a small post-generation
+toward the original every eighteenth frame, and applies a small post-generation
 anchor. Raw abstraction remains the hard upper bound on visual divergence.
 See [Shared artistic state](SHARED_ARTISTIC_STATE.md) and the
 [visual-service guide](../backend/README.md) for the mappings and drift

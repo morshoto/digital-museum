@@ -51,15 +51,41 @@ private actor SequencedVisualClient: VisualAPIProviding {
     func receivedReferences() -> [VisualReference] { references }
 }
 
+private actor SlowVisualClient: VisualAPIProviding {
+    private let response: VisualGenerationResponse
+    private var requests: [VisualGenerationRequest] = []
+
+    init(response: VisualGenerationResponse) {
+        self.response = response
+    }
+
+    func health() async throws -> VisualHealthResponse {
+        VisualHealthResponse(ok: true, backend: response.backend)
+    }
+
+    func generate(_ request: VisualGenerationRequest) async throws -> VisualGenerationResponse {
+        requests.append(request)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        return response
+    }
+
+    func receivedStates() -> [WorldState] { requests.map(\.state) }
+}
+
 @main
 struct VerificationRunner {
     static func main() async {
         do {
             try verifyParameters()
             try verifyArtisticState()
+            try verifyVisualTransitionTimeline()
             try verifyPaintingReferences()
+            try verifyPaintingWorldTimeline()
+            try verifyPaintingAnchorRendering()
             try await verifyOSC()
             try await verifyOSCWithoutReceiver()
+            try await verifyOneFrameGenerationGate()
+            try await verifyPaintingWorldFailureRetention()
             try await verifyVisualIntegration()
             print("PASS: all Swift core and integration checks passed")
         } catch {
@@ -199,10 +225,73 @@ struct VerificationRunner {
         return value
     }
 
+    private static func verifyVisualTransitionTimeline() throws {
+        try require(VisualTransitionConfiguration.installation.duration == 1.2, "installation crossfade was not tuned for the five-second stream")
+        let configuration = VisualTransitionConfiguration(duration: 10)
+        var timeline = VisualTransitionTimeline(configuration: configuration)
+        let images = (0..<4).map { _ in NSImage(size: NSSize(width: 16, height: 16)) }
+
+        timeline.receive(.init(currentImage: images[0], transitionID: 1), at: 0)
+        try require(timeline.hasValidImage, "initial keyframe left the transition timeline blank")
+        try require(timeline.presentation(at: 0).count == 1, "initial keyframe did not settle immediately")
+
+        timeline.receive(.init(currentImage: images[1], previousImage: images[0], transitionID: 2), at: 20)
+        let progressTimes = stride(from: 20.0, through: 30.0, by: 0.25)
+        let progress = progressTimes.map { timeline.normalizedProgress(at: $0) }
+        try require(progress.allSatisfy { (0...1).contains($0) }, "transition progress escaped 0...1")
+        try require(zip(progress, progress.dropFirst()).allSatisfy { $0 <= $1 }, "transition progress was not monotonic")
+
+        let supersedeTime = 24.0
+        let beforeSupersede = Dictionary(uniqueKeysWithValues: timeline.presentation(at: supersedeTime).map { ($0.id, $0.opacity) })
+        timeline.receive(.init(currentImage: images[2], previousImage: images[1], transitionID: 3), at: supersedeTime)
+        let afterSupersede = Dictionary(uniqueKeysWithValues: timeline.presentation(at: supersedeTime).map { ($0.id, $0.opacity) })
+        for (id, opacity) in beforeSupersede {
+            try require(abs((afterSupersede[id] ?? -1) - opacity) < 0.000_001, "superseding keyframe reset visible opacity for layer \(id)")
+        }
+        try require(abs((afterSupersede[3] ?? -1)) < 0.000_001, "superseding target appeared with nonzero initial opacity")
+        try require(abs(afterSupersede.values.reduce(0, +) - 1) < 0.000_001, "superseding keyframe produced a blank or over-bright composite")
+
+        timeline.receive(.init(currentImage: images[1], transitionID: 2), at: 25)
+        try require(timeline.latestTransitionID == 3 && timeline.targetImage === images[2], "stale transition overwrote the newer target")
+        timeline.receive(.init(currentImage: nil, transitionID: 4), at: 25)
+        try require(timeline.latestTransitionID == 3 && timeline.hasValidImage, "missing keyframe cleared the last valid image")
+
+        timeline.receive(.init(currentImage: images[3], previousImage: images[2], transitionID: 4), at: 26)
+        try require(timeline.presentation(at: 26).reduce(0) { $0 + $1.opacity } > 0.999_999, "rapid A-B-C-D updates created a blank state")
+        let finalLayers = timeline.presentation(at: 40).filter { $0.opacity > 0.000_001 }
+        try require(finalLayers.count == 1 && finalLayers[0].id == 4 && finalLayers[0].image === images[3], "final presentation did not settle on the latest valid keyframe")
+
+        let states = [
+            WorldState(motion: 0, tension: 0),
+            WorldState(motion: 1, tension: 0),
+            WorldState(motion: 1, tension: 1),
+        ]
+        for state in states {
+            for time in stride(from: 0.0, through: 180.0, by: 0.37) {
+                let first = timeline.presentationTransform(at: time, worldState: state)
+                let second = timeline.presentationTransform(at: time, worldState: state)
+                try require(first == second, "identical transform input and timestamp were not deterministic")
+                try require((1...1.002).contains(first.scale), "presentation scale escaped 1.000...1.002")
+                try require(abs(first.offsetX) <= 1.000_001 && abs(first.offsetY) <= 1.000_001, "presentation offset escaped the one-point bound")
+            }
+        }
+        let still = timeline.presentationTransform(at: 0, worldState: .init(motion: 0, tension: 0))
+        let active = timeline.presentationTransform(at: 0, worldState: .init(motion: 1, tension: 0))
+        try require(hypot(active.offsetX, active.offsetY) > hypot(still.offsetX, still.offsetY), "motion did not increase micro-motion magnitude")
+        try require(abs(active.offsetX) <= 1 && abs(active.offsetY) <= 1, "motion exceeded safe micro-motion limits")
+        let settledTransform = timeline.presentationTransform(at: 5, worldState: .init(motion: 0, tension: 0))
+        try require(settledTransform.scale == 1 && settledTransform.offsetX == 0 && settledTransform.offsetY == 0, "zero motion did not produce a presentation-only transform")
+        print("PASS: bounded 1.2-second stream transitions, optional 1.002/one-point micro-motion, stale-update safety, and rapid A-B-C-D supersession")
+    }
+
     private static func verifyPaintingReferences() throws {
         let catalog = PaintingCatalog.bundled
-        try require(catalog.paintings.count == 4, "bundled painting catalog did not contain four references")
+        try require(catalog.paintings.count == 8, "bundled painting catalog did not contain eight references")
+        try require(Set(catalog.paintings.map(\.artist)).count == 5, "bundled catalog did not span five Impressionist artists")
         try require(catalog.defaultPainting?.id == "monet-water-lilies-1906", "Water Lilies was not the default painting")
+        try require(catalog.rotation.minimumDwellGenerations == 24, "minimum painting dwell was not two minutes at five-second cadence")
+        try require(catalog.rotation.maximumDwellGenerations == 96, "maximum painting dwell was not eight minutes at five-second cadence")
+        try require(catalog.rotation.transitionGenerations == 6, "anchor bridge was not configured for six generations")
 
         let defaultResolution = try OriginalImageResolver.resolve(environment: [:])
         try require(defaultResolution.source == .bundledPainting, "unset environment did not select a bundled painting")
@@ -213,6 +302,7 @@ struct VerificationRunner {
             let data = try Data(contentsOf: resolution.fileURL)
             try require(data.starts(with: [0x89, 0x50, 0x4e, 0x47]), "\(painting.resourceFilename) was not a PNG")
             try require(NSImage(data: data) != nil, "AppKit could not decode \(painting.resourceFilename)")
+            try require(!painting.tags.isEmpty && !painting.promptBias.isEmpty, "\(painting.id) was missing its painting profile")
         }
 
         let override = try OriginalImageResolver.resolve(
@@ -226,7 +316,65 @@ struct VerificationRunner {
         } catch OriginalImageResolutionError.invalidOverride(let path) {
             try require(path == "/definitely/missing/evolving-reference.png", "invalid override error omitted the actionable path")
         }
-        print("PASS: four decodable bundled PNG references, Water Lilies default, environment override, and invalid-override rejection")
+        print("PASS: eight profiled, decodable bundled references across five artists, Water Lilies default, environment override, and invalid-override rejection")
+    }
+
+    private static func verifyPaintingWorldTimeline() throws {
+        let bundled = PaintingCatalog.bundled
+        let catalog = PaintingCatalog(
+            paintings: bundled.paintings,
+            defaultPaintingID: bundled.defaultPaintingID,
+            rotation: .init(minimumDwellGenerations: 3, maximumDwellGenerations: 3, transitionGenerations: 4)
+        )
+        var timeline = PaintingWorldTimeline(catalog: catalog)
+        let initial = timeline.prepare()
+        try require(initial.currentIndex == 0 && initial.nextIndex == nil && initial.anchorProgress == 0, "painting world did not begin settled on its default")
+
+        for _ in 0..<3 { timeline.commit(timeline.prepare()) }
+        var bridge: [PaintingWorldSnapshot] = []
+        for _ in 0..<4 {
+            let snapshot = timeline.prepare()
+            bridge.append(snapshot)
+            timeline.commit(snapshot)
+        }
+        let progress = bridge.map(\.anchorProgress)
+        try require(progress.allSatisfy { (0...1).contains($0) }, "anchor progress escaped 0...1")
+        try require(zip(progress, progress.dropFirst()).allSatisfy { $0 < $1 }, "anchor progress was not strictly monotonic")
+        try require(progress.last == 1, "anchor bridge did not arrive exactly at its target")
+        let targetIndex = try requireValue(bridge.first?.nextIndex, "anchor bridge had no target")
+        try require(catalog.paintings[targetIndex].artist != catalog.paintings[0].artist, "rotation selected the same artist consecutively")
+        try require(timeline.currentIndex == targetIndex && timeline.generationInWorld == 0, "completed bridge did not settle on its target world")
+
+        let currentRevision = timeline.revision
+        timeline.commit(bridge[0])
+        try require(timeline.revision == currentRevision, "stale painting-world completion overwrote newer state")
+
+        let duplicate = PaintingWorldTimeline(catalog: catalog)
+        try require(initial == duplicate.prepare(), "painting-world selection was not deterministic")
+        print("PASS: deterministic 2-8 minute painting rotation, monotonic six-frame anchor bridge, artist variety, and stale-completion safety")
+    }
+
+    @MainActor
+    private static func verifyPaintingAnchorRendering() throws {
+        let bundled = PaintingCatalog.bundled
+        let catalog = PaintingCatalog(
+            paintings: bundled.paintings,
+            defaultPaintingID: bundled.defaultPaintingID,
+            rotation: .init(minimumDwellGenerations: 1, maximumDwellGenerations: 1, transitionGenerations: 3)
+        )
+        let controller = PaintingWorldController(catalog: catalog, outputSize: .init(width: 160, height: 90))
+        let settled = try controller.prepare()
+        try require(settled.fileURL.lastPathComponent == bundled.paintings[0].resourceFilename, "settled world did not use its source anchor directly")
+        controller.commit(settled)
+        let bridge = try controller.prepare()
+        let data = try Data(contentsOf: bridge.fileURL)
+        try require(bridge.fileURL.lastPathComponent.hasPrefix("world-anchor__0__1__"), "bridge filename did not preserve profile identity")
+        try require(data.starts(with: [0x89, 0x50, 0x4e, 0x47]) && NSImage(data: data) != nil, "rendered multi-anchor bridge was not a decodable PNG")
+        try require(
+            FileManager.default.fileExists(atPath: bridge.fileURL.deletingLastPathComponent().appendingPathComponent("catalog.json").path),
+            "bridge anchor did not carry restart-safe profile context"
+        )
+        print("PASS: bridge anchor raster is generated only during world transition and remains decodable")
     }
 
     @MainActor
@@ -313,6 +461,46 @@ struct VerificationRunner {
             state: .init(brightness: 0.8, warmth: 0.7, abstraction: 0.6, motion: 0.9, tension: 0.5),
             reference: .init(originalImagePath: originalImagePath, previousGenerationID: first.generationID)
         ))
+        try require(first.prompt.contains("Water Lilies"), "service did not resolve the active painting profile")
+        let bundled = PaintingCatalog.bundled
+        let bridgeCatalog = PaintingCatalog(
+            paintings: bundled.paintings,
+            defaultPaintingID: bundled.defaultPaintingID,
+            rotation: .init(minimumDwellGenerations: 1, maximumDwellGenerations: 1, transitionGenerations: 6)
+        )
+        let bridgeController = await PaintingWorldController(
+            catalog: bridgeCatalog,
+            outputSize: .init(width: 320, height: 180)
+        )
+        let settledAnchor = try await bridgeController.prepare()
+        await bridgeController.commit(settledAnchor)
+        var bridgePreviousID = second.generationID
+        for step in 1...6 {
+            let bridgeAnchor = try await bridgeController.prepare()
+            let bridgeResponse = try await client.generate(.init(
+                state: .init(brightness: 0.6, warmth: 0.5, abstraction: 0.3, motion: 0.4, tension: 0.2),
+                reference: .init(originalImagePath: bridgeAnchor.fileURL.path, previousGenerationID: bridgePreviousID)
+            ))
+            let expectedPrompt = step < 6 ? "continuous painted bridge" : "Two Sisters"
+            try require(bridgeResponse.prompt.contains(expectedPrompt), "service did not apply the expected painting profile at bridge step \(step)")
+            try require(
+                bridgeResponse.referenceUsage == VisualReferenceUsage(originalImage: true, previousImage: true),
+                "anchor bridge step \(step) did not retain both its mixed original and generated predecessor"
+            )
+            guard let bridgeData = bridgeResponse.imageData else {
+                throw VerificationFailure(description: "anchor bridge step \(step) omitted image data")
+            }
+            try require(NSImage(data: bridgeData) != nil, "AppKit could not decode anchor bridge step \(step)")
+            if let artifactDirectory = environment["VISUAL_ARTIFACT_DIR"] {
+                let directory = URL(fileURLWithPath: artifactDirectory, isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try bridgeData.write(to: directory.appendingPathComponent(String(format: "bridge-%02d.png", step)))
+            }
+            bridgePreviousID = bridgeResponse.generationID
+            await bridgeController.commit(bridgeAnchor)
+        }
+        let finalWorldIndex = await bridgeController.timeline.currentIndex
+        try require(finalWorldIndex == 1, "six-step bridge did not settle on the Renoir world")
         try require(
             first.referenceUsage == VisualReferenceUsage(originalImage: true, previousImage: false),
             "first generation reference usage did not match the request"
@@ -342,7 +530,75 @@ struct VerificationRunner {
             try require(afterFailureHealth.ok && afterFailureHealth.backend == "diffusers", "real backend crashed after a controlled generation failure")
         }
         try await verifyVisualServiceTransitions(first: first, second: second)
-        print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles plus retained frames across network/undecodable failures and recovery")
+        print("PASS: Swift → HTTP → \(expectedBackend) settled and multi-anchor image cycles plus retained frames across network/undecodable failures and recovery")
+    }
+
+    @MainActor
+    private static func verifyOneFrameGenerationGate() async throws {
+        let imageURL = try OriginalImageResolver.resolve(environment: [:]).fileURL
+        let imageBase64 = try Data(contentsOf: imageURL).base64EncodedString()
+        let response = VisualGenerationResponse(
+            imageBase64: imageBase64,
+            mediaType: "image/png",
+            generationID: "slow-client-generation",
+            prompt: "verification",
+            backend: "slow-verifier"
+        )
+        let client = SlowVisualClient(response: response)
+        let visual = VisualService(client: client, originalImagePath: imageURL.path)
+        let firstState = WorldState(motion: 0.1)
+        let skippedState = WorldState(motion: 0.5)
+        let nextState = WorldState(motion: 0.9)
+
+        let inFlight = Task { await visual.generate(for: firstState) }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        try require(visual.isGenerating, "slow generation did not enter the in-flight state")
+        await visual.generate(for: skippedState)
+        await inFlight.value
+        let statesAfterOverlap = await client.receivedStates()
+        try require(statesAfterOverlap == [firstState], "overlapping generation was queued or executed")
+
+        await visual.generate(for: nextState)
+        let acceptedStates = await client.receivedStates()
+        try require(acceptedStates == [firstState, nextState], "next accepted generation did not use the latest state")
+        try require(visual.generationSuccessCount == 2 && visual.generationFailureCount == 0, "one-frame generation gate corrupted counters")
+        print("PASS: warm generation gate runs one frame at a time, skips overlap, and accepts the newest subsequent WorldState")
+    }
+
+    @MainActor
+    private static func verifyPaintingWorldFailureRetention() async throws {
+        let bundled = PaintingCatalog.bundled
+        let catalog = PaintingCatalog(
+            paintings: bundled.paintings,
+            defaultPaintingID: bundled.defaultPaintingID,
+            rotation: .init(minimumDwellGenerations: 1, maximumDwellGenerations: 1, transitionGenerations: 3)
+        )
+        let imageURL = try OriginalImageResolver.resolve(environment: [:]).fileURL
+        let response = VisualGenerationResponse(
+            imageBase64: try Data(contentsOf: imageURL).base64EncodedString(),
+            mediaType: "image/png",
+            generationID: "painting-world-success",
+            prompt: "verification",
+            backend: "sequenced-verifier"
+        )
+        let client = SequencedVisualClient(backend: response.backend, steps: [
+            .failure(.cannotConnectToHost),
+            .response(response),
+        ])
+        let paintingWorld = PaintingWorldController(catalog: catalog, outputSize: .init(width: 160, height: 90))
+        let visual = VisualService(
+            client: client,
+            originalImagePath: imageURL.path,
+            paintingWorld: paintingWorld
+        )
+
+        await visual.generate(for: WorldState())
+        try require(paintingWorld.timeline.generationInWorld == 0, "failed generation advanced the painting world")
+        try require(visual.currentImage == nil, "failed initial generation installed a blank replacement")
+        await visual.generate(for: WorldState())
+        try require(paintingWorld.timeline.generationInWorld == 1, "successful generation did not advance the painting world exactly once")
+        try require(visual.currentImage != nil, "successful recovery did not install its frame")
+        print("PASS: generation failure retains both the last visual and painting-world anchor state")
     }
 
     @MainActor

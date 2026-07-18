@@ -18,7 +18,7 @@ EVOLVING_BACKEND=diffusers \
 uv run --frozen --extra diffusion python backend/server.py
 ```
 
-Swift uses the bundled Monet *Water Lilies* reference unless
+Swift uses the bundled Impressionist catalog, starting at Monet *Water Lilies*, unless
 `EVOLVING_ORIGINAL_IMAGE` supplies a readable override. Provenance for every
 bundled painting is recorded in the
 [painting catalog](../application/EvolvingImpressionistCore/Resources/Paintings/README.md).

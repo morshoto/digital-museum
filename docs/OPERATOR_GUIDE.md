@@ -41,9 +41,19 @@ macOS Space. Confirm the intended display is primary before launch.
 - `Cmd-F` toggles the borderless exhibition presentation.
 
 The last valid artwork remains visible during service or decoding failures.
-Later cycles retry, and valid replacement frames crossfade over the retained
-frame. UDP does not require a receiver, so disabling the music stack does not
-stop visual generation.
+Later cycles retry without advancing the painting world. The warm Diffusion
+pipeline produces a new evolution about every five seconds; valid frames blend
+for 1.2 seconds over the retained frame. Scale is at most 1.002 and translation
+at most one point; zero motion disables both. A replacement arriving during an
+active transition starts from the currently visible composite rather than
+resetting opacity.
+
+Without an original-image override, one catalog world remains active for two
+to eight minutes. Six generation anchors then move gradually into a different
+artist's world over about 30 seconds while previous-frame feedback continues.
+This is expected Diffusion evolution, not a source-image slideshow. UDP does
+not require a receiver, so disabling the music stack does not stop visual
+generation.
 
 For unattended operation, the launcher forces `EVOLVING_DIAGNOSTICS=1` and
 defaults to `caffeinate -dimsu`. Connect the Mac to AC power and manually verify
@@ -59,14 +69,14 @@ saver settings before admitting visitors.
 | `EVOLVING_MODEL_ID` | `stabilityai/sdxl-turbo` | Hugging Face ID or local Diffusers directory. |
 | `EVOLVING_VISUAL_HOST` / `EVOLVING_VISUAL_PORT` | `127.0.0.1` / `8000` | Visual-service listener. |
 | `EVOLVING_VISUAL_URL` | derived from host and port | URL used by Swift and health checks. |
-| `EVOLVING_ORIGINAL_IMAGE` | bundled Monet *Water Lilies* | Optional readable original-painting override. |
+| `EVOLVING_ORIGINAL_IMAGE` | bundled eight-work catalog starting at Monet *Water Lilies* | Optional readable fixed original-painting override; setting it disables catalog rotation. |
 | `EVOLVING_IMAGE_WIDTH` / `EVOLVING_IMAGE_HEIGHT` | `1024` / `576` | Diffusers output dimensions; multiples of eight. |
 | `EVOLVING_ATTENTION_SLICING` | `0` | Set `1` to lower peak model memory at a speed cost. |
 | `EVOLVING_OSC_HOST` / `EVOLVING_OSC_PORT` | `127.0.0.1` / `57120` | Swift WorldState destination and sclang port. |
 | `EVOLVING_TIDAL_CONTROL_PORT` | `6010` | Bridge destination for Tidal `/ctrl` messages. |
 | `EVOLVING_DIRT_PORT` | `57120` | Tidal `/dirt/play` destination used by SuperDirt. |
 | `EVOLVING_REQUIRE_MUSIC` | `1` | Require the complete music runtime during startup. |
-| `EVOLVING_GENERATION_INTERVAL` | `45` | Seconds between Swift generation attempts. |
+| `EVOLVING_GENERATION_INTERVAL` | `5` | Seconds between non-overlapping Swift generation attempts. |
 | `EVOLVING_PREVENT_SLEEP` | `1` | Run the app under non-persistent `caffeinate`. |
 | `EVOLVING_STARTUP_TIMEOUT` | `180` | Seconds allowed for model and SuperDirt startup. |
 | `EVOLVING_INITIAL_GENERATION_TIMEOUT` | `180` | Seconds allowed for the first generation. |
@@ -76,7 +86,7 @@ saver settings before admitting visitors.
 | `HF_HUB_OFFLINE` / `HF_HUB_DISABLE_XET` | upstream defaults | Hugging Face cache and network behavior. |
 
 An explicit invalid `EVOLVING_ORIGINAL_IMAGE` fails closed with an actionable
-error. Leave it unset to use the packaged Monet reference.
+error. Leave it unset to use the packaged Impressionist painting worlds.
 
 ## Mock mode
 
