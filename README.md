@@ -51,7 +51,7 @@ borderless exhibition presentation.
 - [Documentation index](./docs/README.md)
 - [Operator guide](./docs/OPERATOR_GUIDE.md)
 - [Architecture](./docs/ARCHITECTURE.md)
-- [Painting provenance](./Sources/EvolvingImpressionistCore/Resources/Paintings/README.md)
+- [Painting provenance](./application/EvolvingImpressionistCore/Resources/Paintings/README.md)
 
 ## Development
 

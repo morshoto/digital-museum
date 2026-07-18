@@ -11,12 +11,12 @@ free, unrestricted commercial and noncommercial reuse of images bearing that
 designation. The Wikimedia Commons file records used for the actual downloads
 also mark each reproduction as public domain.
 
-| Runtime file | Artwork | Artist | Date | Institution | Museum record | Download record | Rights status |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `monet-water-lilies.png` | *Water Lilies* | Claude Monet | 1906 | Art Institute of Chicago | [AIC 1933.1157][aic-water-lilies] | [Wikimedia Commons][commons-water-lilies] | AIC CC0 Public Domain Designation; Commons Public Domain Mark / PD-Art |
-| `monet-water-lily-pond.png` | *Water Lily Pond* (Japanese footbridge) | Claude Monet | 1900 | Art Institute of Chicago | [AIC 1933.441][aic-water-lily-pond] | [Wikimedia Commons][commons-water-lily-pond] | AIC CC0 Public Domain Designation; Commons public-domain/CC0 record |
-| `monet-stacks-of-wheat.png` | *Stacks of Wheat (End of Summer)* | Claude Monet | 1890–91 | Art Institute of Chicago | [AIC 1985.1103][aic-stacks] | [Wikimedia Commons][commons-stacks] | AIC CC0 Public Domain Designation; Commons public-domain/PD-Art record |
-| `monet-beach-at-sainte-adresse.png` | *The Beach at Sainte-Adresse* | Claude Monet | 1867 | Art Institute of Chicago | [AIC 1933.439][aic-beach] | [Wikimedia Commons][commons-beach] | AIC CC0 Public Domain Designation; Commons public-domain/PD-Art record |
+| Runtime file                        | Artwork                                 | Artist       | Date    | Institution              | Museum record                       | Download record                              | Rights status                                                          |
+| ----------------------------------- | --------------------------------------- | ------------ | ------- | ------------------------ | ----------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------- |
+| `monet-water-lilies.png`            | *Water Lilies*                          | Claude Monet | 1906    | Art Institute of Chicago | [AIC 1933.1157][aic-water-lilies]   | [Wikimedia Commons][commons-water-lilies]    | AIC CC0 Public Domain Designation; Commons Public Domain Mark / PD-Art |
+| `monet-water-lily-pond.png`         | *Water Lily Pond* (Japanese footbridge) | Claude Monet | 1900    | Art Institute of Chicago | [AIC 1933.441][aic-water-lily-pond] | [Wikimedia Commons][commons-water-lily-pond] | AIC CC0 Public Domain Designation; Commons public-domain/CC0 record    |
+| `monet-stacks-of-wheat.png`         | *Stacks of Wheat (End of Summer)*       | Claude Monet | 1890–91 | Art Institute of Chicago | [AIC 1985.1103][aic-stacks]         | [Wikimedia Commons][commons-stacks]          | AIC CC0 Public Domain Designation; Commons public-domain/PD-Art record |
+| `monet-beach-at-sainte-adresse.png` | *The Beach at Sainte-Adresse*           | Claude Monet | 1867    | Art Institute of Chicago | [AIC 1933.439][aic-beach]           | [Wikimedia Commons][commons-beach]           | AIC CC0 Public Domain Designation; Commons public-domain/PD-Art record |
 
 The default runtime reference is `monet-water-lilies.png`.
 
@@ -40,7 +40,7 @@ curl -fL 'https://upload.wikimedia.org/wikipedia/commons/0/01/Claude_Monet_-_The
 for source in /tmp/evolving-paintings/*.jpg; do
   name=$(basename "$source" .jpg)
   sips --resampleWidth 1280 -s format png "$source" \
-    --out "Sources/EvolvingImpressionistCore/Resources/Paintings/$name.png"
+    --out "application/EvolvingImpressionistCore/Resources/Paintings/$name.png"
 done
 ```
 

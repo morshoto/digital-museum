@@ -17,4 +17,4 @@
 - [Visual-service configuration](../visual_service/README.md)
 - [Real Diffusers verification](../visual_service/VERIFICATION.md)
 - [Live music verification](../tidal/LIVE_VERIFICATION.md)
-- [Painting provenance](../Sources/EvolvingImpressionistCore/Resources/Paintings/README.md)
+- [Painting provenance](../application/EvolvingImpressionistCore/Resources/Paintings/README.md)

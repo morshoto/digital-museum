@@ -21,7 +21,7 @@ uv run --frozen --extra diffusion python visual_service/server.py
 Swift uses the bundled Monet *Water Lilies* reference unless
 `EVOLVING_ORIGINAL_IMAGE` supplies a readable override. Provenance for every
 bundled painting is recorded in the
-[painting catalog](../Sources/EvolvingImpressionistCore/Resources/Paintings/README.md).
+[painting catalog](../application/EvolvingImpressionistCore/Resources/Paintings/README.md).
 
 ## Music development
 

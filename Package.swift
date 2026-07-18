@@ -11,18 +11,18 @@ let package = Package(
     targets: [
         .target(
             name: "EvolvingImpressionistCore",
-            path: "Sources/EvolvingImpressionistCore",
+            path: "application/EvolvingImpressionistCore",
             resources: [.copy("Resources/Paintings")]
         ),
         .executableTarget(
             name: "EvolvingImpressionist",
             dependencies: ["EvolvingImpressionistCore"],
-            path: "Sources/EvolvingImpressionist"
+            path: "application/EvolvingImpressionist"
         ),
         .executableTarget(
             name: "EvolvingImpressionistVerify",
             dependencies: ["EvolvingImpressionistCore"],
-            path: "Sources/EvolvingImpressionistVerify"
+            path: "application/EvolvingImpressionistVerify"
         )
     ]
 )
