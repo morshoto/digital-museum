@@ -1,0 +1,52 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - verification/**
+      - .python-version
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/backend.yml
+  pull_request:
+    paths:
+      - backend/**
+      - verification/**
+      - .python-version
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/backend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Python backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Check Python sources
+        run: uv run --frozen python -m py_compile backend/server.py backend/verify_real.py
+
+      - name: Run backend tests
+        run: uv run --frozen python -m unittest discover -s backend/tests -v
