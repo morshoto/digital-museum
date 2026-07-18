@@ -26,16 +26,35 @@ public struct VisualGenerationResponse: Codable, Equatable, Sendable {
     public let generationID: String
     public let prompt: String
     public let backend: String
+    public let referenceUsage: VisualReferenceUsage?
 
-    public init(imageBase64: String, mediaType: String, generationID: String, prompt: String, backend: String) {
+    public init(
+        imageBase64: String,
+        mediaType: String,
+        generationID: String,
+        prompt: String,
+        backend: String,
+        referenceUsage: VisualReferenceUsage? = nil
+    ) {
         self.imageBase64 = imageBase64
         self.mediaType = mediaType
         self.generationID = generationID
         self.prompt = prompt
         self.backend = backend
+        self.referenceUsage = referenceUsage
     }
 
     public var imageData: Data? { Data(base64Encoded: imageBase64) }
+}
+
+public struct VisualReferenceUsage: Codable, Equatable, Sendable {
+    public let originalImage: Bool
+    public let previousImage: Bool
+
+    public init(originalImage: Bool, previousImage: Bool) {
+        self.originalImage = originalImage
+        self.previousImage = previousImage
+    }
 }
 
 public struct VisualHealthResponse: Codable, Equatable, Sendable {

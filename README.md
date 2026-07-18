@@ -63,7 +63,8 @@ does not stop the app.
 The service exposes `GET /health` and `POST /generate`. Requests include the
 five normalized parameters plus `originalImagePath` and
 `previousGenerationID`. Responses contain base64 image data, media type,
-backend name, prompt, and a generation ID. The service retains a bounded cache
+backend name, prompt, a generation ID, and backend-neutral flags confirming
+which requested references were resolved. The service retains a bounded cache
 of recent frames so each generation can use its predecessor.
 
 To anchor mock or real generations to an original painting:

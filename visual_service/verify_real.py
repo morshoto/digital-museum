@@ -7,6 +7,7 @@ import base64
 import json
 from pathlib import Path
 import time
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
@@ -25,6 +26,22 @@ def post_json(url: str, payload: dict, timeout: float) -> tuple[dict, float]:
         return json.load(response), time.perf_counter() - started
 
 
+def get_json(url: str, timeout: float) -> dict:
+    with urlopen(url, timeout=timeout) as response:
+        return json.load(response)
+
+
+def expect_json_error(url: str, payload: dict, timeout: float, expected_status: int) -> dict:
+    try:
+        post_json(url, payload, timeout)
+    except HTTPError as error:
+        body = json.load(error)
+        if error.code != expected_status or not isinstance(body.get("error"), str):
+            raise RuntimeError(f"expected HTTP {expected_status} JSON error, got HTTP {error.code}: {body}") from error
+        return {"status": error.code, "error": body["error"]}
+    raise RuntimeError(f"expected HTTP {expected_status}, but invalid generation succeeded")
+
+
 def mean_absolute_difference(first: Image.Image, second: Image.Image) -> float:
     means = ImageStat.Stat(ImageChops.difference(first, second)).mean
     return round(sum(means) / len(means), 3)
@@ -41,13 +58,18 @@ def main() -> None:
     if not arguments.original.is_file():
         parser.error(f"original image not found: {arguments.original}")
     arguments.output_dir.mkdir(parents=True, exist_ok=True)
+    generate_url = f"{arguments.url.rstrip('/')}/generate"
+    health_url = f"{arguments.url.rstrip('/')}/health"
+    health_before = get_json(health_url, arguments.timeout)
+    if not health_before.get("ok") or health_before.get("backend") != "diffusers" or health_before.get("mediaType") != "image/png":
+        raise RuntimeError(f"expected a healthy diffusers PNG backend, got {health_before}")
     previous_id = None
     records = []
     decoded = []
 
     for index, state in enumerate(STATES, 1):
         body, duration = post_json(
-            f"{arguments.url.rstrip('/')}/generate",
+            generate_url,
             {
                 "state": state,
                 "reference": {
@@ -59,6 +81,11 @@ def main() -> None:
         )
         if body.get("backend") != "diffusers" or body.get("mediaType") != "image/png":
             raise RuntimeError(f"expected a diffusers PNG response, got {body.get('backend')} {body.get('mediaType')}")
+        expected_references = {"originalImage": True, "previousImage": previous_id is not None}
+        if body.get("referenceUsage") != expected_references:
+            raise RuntimeError(
+                f"generation {index} reference usage was {body.get('referenceUsage')}, expected {expected_references}"
+            )
         image_bytes = base64.b64decode(body["imageBase64"], validate=True)
         output_path = arguments.output_dir / f"generation-{index}.png"
         output_path.write_bytes(image_bytes)
@@ -81,11 +108,39 @@ def main() -> None:
         })
         previous_id = body["generationID"]
 
+    invalid_reference = arguments.output_dir / "invalid-reference.txt"
+    invalid_reference.write_text("not an image", encoding="utf-8")
+    try:
+        controlled_failure = expect_json_error(
+            generate_url,
+            {
+                "state": STATES[0],
+                "reference": {
+                    "originalImagePath": str(invalid_reference.resolve()),
+                    "previousGenerationID": previous_id,
+                },
+            },
+            arguments.timeout,
+            expected_status=400,
+        )
+    finally:
+        invalid_reference.unlink(missing_ok=True)
+    health_after = get_json(health_url, arguments.timeout)
+    if not health_after.get("ok") or health_after.get("backend") != "diffusers":
+        raise RuntimeError(f"diffusers service was not healthy after controlled failure: {health_after}")
+
     with Image.open(arguments.original) as source:
         original = ImageOps.fit(source.convert("RGB"), decoded[0].size, method=Image.Resampling.LANCZOS)
     print(json.dumps({
         "backend": "diffusers",
+        "healthBefore": health_before,
         "generations": records,
+        "referenceVerification": {
+            "originalUsedForEveryGeneration": True,
+            "generation2UsedGeneration1": True,
+        },
+        "controlledFailure": controlled_failure,
+        "healthAfterFailure": health_after,
         "meanAbsolutePixelDifference": {
             "originalToGeneration1": mean_absolute_difference(original, decoded[0]),
             "originalToGeneration2": mean_absolute_difference(original, decoded[1]),
