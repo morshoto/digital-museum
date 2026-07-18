@@ -22,6 +22,7 @@ import uuid
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
 DEFAULT_DIFFUSERS_MODEL = "stabilityai/sd-turbo"
 DEFAULT_IMAGE_SIZE = 512
+DEFAULT_GENERATION_HISTORY_LIMIT = 16
 
 
 class RequestError(ValueError):
@@ -261,19 +262,29 @@ class DiffusersBackend:
 
 
 class GenerationStore:
-    def __init__(self, limit: int = 12):
+    def __init__(self, limit: int = DEFAULT_GENERATION_HISTORY_LIMIT):
+        if limit < 1:
+            raise ValueError("generation history limit must be positive")
         self._items: OrderedDict[str, bytes] = OrderedDict()
         self.limit = limit
+        self._lock = threading.Lock()
 
     def put(self, value: bytes) -> str:
         generation_id = uuid.uuid4().hex
-        self._items[generation_id] = value
-        while len(self._items) > self.limit:
-            self._items.popitem(last=False)
+        with self._lock:
+            self._items[generation_id] = value
+            while len(self._items) > self.limit:
+                self._items.popitem(last=False)
         return generation_id
 
     def get(self, generation_id: str | None) -> bytes | None:
-        return self._items.get(generation_id) if generation_id else None
+        if not generation_id:
+            return None
+        with self._lock:
+            value = self._items.get(generation_id)
+            if value is not None:
+                self._items.move_to_end(generation_id)
+            return value
 
 
 def handler_for(backend: VisualBackend, store: GenerationStore):

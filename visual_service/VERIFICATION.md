@@ -107,9 +107,9 @@ exceptions return controlled HTTP 500 JSON rather than terminating the server.
 ./scripts/verify.sh
 ```
 
-- Pinned environment: 15 Python tests passed, including three real-backend
-  contract/drift tests.
-- Dependency-free environment: 12 tests passed and the three Pillow-only tests
+- Pinned environment: 18 Python tests passed, including three real-backend
+  contract/drift tests and bounded LRU history eviction checks.
+- Dependency-free environment: 15 tests passed and the three Pillow-only tests
   skipped as intended.
 - `swift build` passed for all targets.
 - Mock service health, two sequential SVG generations, AppKit SVG decoding,

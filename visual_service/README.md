@@ -60,6 +60,11 @@ The path is read by the local Python service. The Swift request also carries
 the prior `generationID`, allowing the service to combine the original and
 previous generated raster on later cycles.
 
+Generated raster history is a thread-safe, bounded LRU containing at most 16
+frames. The normal chain only needs the latest predecessor; the additional
+entries tolerate retries or slightly delayed requests without allowing memory
+usage to grow over a long-running exhibition.
+
 ## WorldState mapping and drift control
 
 | State | Diffusion mapping |

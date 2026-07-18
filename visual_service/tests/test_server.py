@@ -5,10 +5,30 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from visual_service.server import MockBackend, create_server
+from visual_service.server import GenerationStore, MockBackend, create_server
 
 
 VALID_STATE = {"brightness": .6, "warmth": .7, "abstraction": .3, "motion": .4, "tension": .2}
+
+
+class GenerationStoreTests(unittest.TestCase):
+    def test_history_evicts_old_generations_at_its_limit(self):
+        store = GenerationStore(limit=3)
+        generation_ids = [store.put(f"image-{index}".encode()) for index in range(5)]
+        self.assertIsNone(store.get(generation_ids[0]))
+        self.assertIsNone(store.get(generation_ids[1]))
+        self.assertEqual(store.get(generation_ids[2]), b"image-2")
+        self.assertEqual(store.get(generation_ids[4]), b"image-4")
+
+    def test_history_refreshes_recently_used_generation(self):
+        store = GenerationStore(limit=2)
+        first = store.put(b"first")
+        second = store.put(b"second")
+        self.assertEqual(store.get(first), b"first")
+        third = store.put(b"third")
+        self.assertEqual(store.get(first), b"first")
+        self.assertIsNone(store.get(second))
+        self.assertEqual(store.get(third), b"third")
 
 
 class VisualServiceTests(unittest.TestCase):
