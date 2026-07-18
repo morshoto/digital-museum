@@ -20,12 +20,29 @@ struct VerificationRunner {
         do {
             try verifyParameters()
             try await verifyOSC()
+            try await verifyOSCWithoutReceiver()
             try await verifyVisualIntegration()
             print("PASS: all Swift core and integration checks passed")
         } catch {
             fputs("FAIL: \(error)\n", stderr)
             exit(1)
         }
+    }
+
+    @MainActor
+    private static func verifyOSCWithoutReceiver() async throws {
+        // UDP delivery must remain optional for exhibition survival. Port 9 is
+        // deliberately used without opening a receiver in this process.
+        let client = OSCClient(port: 9)
+        for _ in 0..<40 where client.status != .ready { try await Task.sleep(nanoseconds: 25_000_000) }
+        for step in 0..<20 {
+            let value = Double(step) / 19
+            client.send(state: .init(brightness: value, warmth: 1 - value, abstraction: value, motion: 1 - value, tension: value))
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        client.cancel()
+        try require(client.sentMessageCount > 0 || client.status != .ready, "OSC sender neither sent nor reported transport state")
+        print("PASS: repeated OSC sends without a receiver did not crash or block")
     }
 
     private static func require(_ condition: @autoclosure () -> Bool, _ message: String) throws {
