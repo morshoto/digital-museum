@@ -48,6 +48,10 @@ Generation defaults to every 45 seconds. For a faster development loop:
 EVOLVING_GENERATION_INTERVAL=5 swift run EvolvingImpressionist
 ```
 
+For unattended-run diagnostics, set `EVOLVING_DIAGNOSTICS=1`. Each completed
+generation attempt logs cumulative success/failure and OSC-send counts plus all
+five sampled parameter values.
+
 If the visual service is stopped, the last valid artwork remains visible and
 later cycles retry. UDP does not require a receiver, so an absent music stack
 does not stop the app.
@@ -125,3 +129,12 @@ nonzero on failure. The checks remain automated and require no GUI.
 - No one-hour endurance run is part of the quick verification command.
 - A signed `.app` bundle, launch-at-login setup, display selection, and power/
   sleep management are not included in this SwiftPM MVP.
+
+## Exhibition operator setup
+
+Connect the Mac to AC power and disable display sleep for the installation
+session (or launch the app through `caffeinate -dimsu`). The application does
+not change system power settings. Confirm the intended display is primary
+before launch, start the visual service first, and use `Cmd-F` as the documented
+manual fullscreen fallback. `Cmd-D` remains available to inspect live values
+and transport/generation counters, then hides all controls for exhibition.
