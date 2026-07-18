@@ -27,21 +27,39 @@ public final class VisualService: ObservableObject {
 
     private let client: any VisualAPIProviding
     private let originalImagePath: String?
+    private let referenceConfigurationError: String?
 
     public var currentImage: NSImage? { frame.currentImage }
     public var previousImage: NSImage? { frame.previousImage }
     public var transitionID: Int { frame.transitionID }
 
     public convenience init(
-        baseURL: URL = URL(string: ProcessInfo.processInfo.environment["EVOLVING_VISUAL_URL"] ?? "http://127.0.0.1:8000")!,
-        originalImagePath: String? = ProcessInfo.processInfo.environment["EVOLVING_ORIGINAL_IMAGE"]
+        baseURL: URL = URL(string: ProcessInfo.processInfo.environment["EVOLVING_VISUAL_URL"] ?? "http://127.0.0.1:8000")!
     ) {
-        self.init(client: VisualAPIClient(baseURL: baseURL), originalImagePath: originalImagePath)
+        do {
+            let resolution = try OriginalImageResolver.resolve()
+            self.init(client: VisualAPIClient(baseURL: baseURL), originalImagePath: resolution.fileURL.path)
+        } catch {
+            self.init(
+                client: VisualAPIClient(baseURL: baseURL),
+                originalImagePath: nil,
+                referenceConfigurationError: error.localizedDescription
+            )
+        }
     }
 
-    public init(client: any VisualAPIProviding, originalImagePath: String?) {
+    public init(
+        client: any VisualAPIProviding,
+        originalImagePath: String?,
+        referenceConfigurationError: String? = nil
+    ) {
         self.client = client
         self.originalImagePath = originalImagePath
+        self.referenceConfigurationError = referenceConfigurationError
+        if let referenceConfigurationError {
+            status = .failed(referenceConfigurationError)
+            lastError = referenceConfigurationError
+        }
     }
 
     public func checkHealth() async {
@@ -49,8 +67,13 @@ public final class VisualService: ObservableObject {
         do {
             let health = try await client.health()
             backend = health.backend
-            status = health.ok ? .ready : .failed("Service reported unhealthy")
-            lastError = nil
+            if let referenceConfigurationError {
+                status = .failed(referenceConfigurationError)
+                lastError = referenceConfigurationError
+            } else {
+                status = health.ok ? .ready : .failed("Service reported unhealthy")
+                lastError = nil
+            }
         } catch {
             status = .failed(error.localizedDescription)
             lastError = error.localizedDescription
@@ -59,6 +82,12 @@ public final class VisualService: ObservableObject {
 
     public func generate(for state: WorldState) async {
         guard !isGenerating else { return }
+        if let referenceConfigurationError {
+            status = .failed(referenceConfigurationError)
+            lastError = referenceConfigurationError
+            generationFailureCount += 1
+            return
+        }
         isGenerating = true
         defer { isGenerating = false }
         let reference = VisualReference(originalImagePath: originalImagePath, previousGenerationID: previousGenerationID)

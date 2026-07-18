@@ -57,6 +57,7 @@ struct VerificationRunner {
         do {
             try verifyParameters()
             try verifyArtisticState()
+            try verifyPaintingReferences()
             try await verifyOSC()
             try await verifyOSCWithoutReceiver()
             try await verifyVisualIntegration()
@@ -198,6 +199,36 @@ struct VerificationRunner {
         return value
     }
 
+    private static func verifyPaintingReferences() throws {
+        let catalog = PaintingCatalog.bundled
+        try require(catalog.paintings.count == 4, "bundled painting catalog did not contain four references")
+        try require(catalog.defaultPainting?.id == "monet-water-lilies-1906", "Water Lilies was not the default painting")
+
+        let defaultResolution = try OriginalImageResolver.resolve(environment: [:])
+        try require(defaultResolution.source == .bundledPainting, "unset environment did not select a bundled painting")
+        try require(defaultResolution.painting == catalog.defaultPainting, "resolver selected the wrong bundled painting")
+        for painting in catalog.paintings {
+            let selectedCatalog = PaintingCatalog(paintings: catalog.paintings, defaultPaintingID: painting.id)
+            let resolution = try OriginalImageResolver.resolve(environment: [:], catalog: selectedCatalog)
+            let data = try Data(contentsOf: resolution.fileURL)
+            try require(data.starts(with: [0x89, 0x50, 0x4e, 0x47]), "\(painting.resourceFilename) was not a PNG")
+            try require(NSImage(data: data) != nil, "AppKit could not decode \(painting.resourceFilename)")
+        }
+
+        let override = try OriginalImageResolver.resolve(
+            environment: ["EVOLVING_ORIGINAL_IMAGE": defaultResolution.fileURL.path]
+        )
+        try require(override.source == .environmentOverride, "valid EVOLVING_ORIGINAL_IMAGE did not override the catalog")
+        try require(override.fileURL == defaultResolution.fileURL, "override path changed during resolution")
+        do {
+            _ = try OriginalImageResolver.resolve(environment: ["EVOLVING_ORIGINAL_IMAGE": "/definitely/missing/evolving-reference.png"])
+            throw VerificationFailure(description: "missing EVOLVING_ORIGINAL_IMAGE silently fell back")
+        } catch OriginalImageResolutionError.invalidOverride(let path) {
+            try require(path == "/definitely/missing/evolving-reference.png", "invalid override error omitted the actionable path")
+        }
+        print("PASS: four decodable bundled PNG references, Water Lilies default, environment override, and invalid-override rejection")
+    }
+
     @MainActor
     private static func verifyOSC() async throws {
         let socketFD = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
@@ -259,7 +290,7 @@ struct VerificationRunner {
         }
         let environment = ProcessInfo.processInfo.environment
         let expectedBackend = environment["EXPECTED_VISUAL_BACKEND"] ?? "mock"
-        let originalImagePath = environment["EVOLVING_ORIGINAL_IMAGE"]
+        let originalImagePath = try OriginalImageResolver.resolve(environment: environment).fileURL.path
         let client = VisualAPIClient(baseURL: url)
         let health = try await client.health()
         try require(health.ok && health.backend == expectedBackend, "\(expectedBackend) health response was invalid")
@@ -272,11 +303,11 @@ struct VerificationRunner {
             reference: .init(originalImagePath: originalImagePath, previousGenerationID: first.generationID)
         ))
         try require(
-            first.referenceUsage == VisualReferenceUsage(originalImage: originalImagePath != nil, previousImage: false),
+            first.referenceUsage == VisualReferenceUsage(originalImage: true, previousImage: false),
             "first generation reference usage did not match the request"
         )
         try require(
-            second.referenceUsage == VisualReferenceUsage(originalImage: originalImagePath != nil, previousImage: true),
+            second.referenceUsage == VisualReferenceUsage(originalImage: true, previousImage: true),
             "second generation did not resolve its predecessor and original as requested"
         )
         guard let firstData = first.imageData, let secondData = second.imageData else {
