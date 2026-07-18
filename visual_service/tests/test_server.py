@@ -66,6 +66,31 @@ class VisualServiceTests(unittest.TestCase):
         result = backend.generate(VALID_STATE, None, None)
         self.assertEqual(result.media_type, "image/svg+xml")
 
+    def test_backend_failure_is_a_controlled_json_error(self):
+        class FailingBackend:
+            name = "failing"
+
+            def health(self):
+                return {"ok": True, "backend": self.name}
+
+            def generate(self, state, original, previous):
+                raise RuntimeError("intentional backend failure")
+
+        server = create_server(port=0, backend=FailingBackend())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}/generate"
+        payload = {"state": VALID_STATE, "reference": {"originalImagePath": None, "previousGenerationID": None}}
+        try:
+            with self.assertRaises(HTTPError) as context:
+                urlopen(Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}), timeout=2)
+            self.assertEqual(context.exception.code, 500)
+            body = json.load(context.exception)
+            self.assertIn("generation failed: intentional backend failure", body["error"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()
