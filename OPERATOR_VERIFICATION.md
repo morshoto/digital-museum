@@ -120,3 +120,32 @@ fullscreen placement after any cable/display rearrangement, select the intended
 audio device, confirm safe volume and perceived stereo sound in the room, and
 review the model license/installation image. The launcher uses non-persistent
 `caffeinate` assertions and does not alter permanent macOS power settings.
+
+## Post-review runtime hardening
+
+The merge review follow-up added current audio-transport health, safe runtime
+state parsing, fail-closed custom Tidal boot rewriting, stronger local-model
+validation, and explicit `scsynth` lifecycle management.
+
+An isolated full-stack mock smoke used non-default ports and a log directory
+containing spaces and a literal shell metacharacter. Startup reported active
+Tidal transport with 15 `/dirt/play` events and a one-second-old heartbeat.
+After evaluating `hush` while leaving GHCi, SuperCollider, and the Swift app
+alive, status correctly failed five seconds later:
+
+```text
+OK TidalCycles patterns loaded d1/d2
+FAIL audio transport stale SuperDirt_received_dirt_play=15 last_seen_seconds_ago=7
+```
+
+This proves status distinguishes loaded/live processes from current Tidal event
+flow. A second active check observed 115 events with a one-second heartbeat.
+Shutdown was then verified to remove the visual, sclang, `scsynth`, Tidal
+control, and Dirt listeners; `scsynth` is now tracked explicitly rather than
+being assumed to exit with sclang.
+
+The JSON state round-trip preserved both
+`My Logs; literal` and `http://127.0.0.1:8000/?x=$HOME` verbatim with mode
+`0600`. A custom Tidal session bound the requested control port `6033` and Dirt
+port `57333`; generated BootTidal content now must contain exactly one patched
+instance and both requested values or startup fails.

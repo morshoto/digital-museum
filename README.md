@@ -322,7 +322,7 @@ config file. Export stable site values in the operator shell or launch wrapper.
 | --- | --- | --- |
 | `EVOLVING_BACKEND` | `diffusers` in launcher | Exact required backend (`diffusers` or explicitly allowed `mock`). |
 | `EVOLVING_ALLOW_MOCK_EXHIBITION` | `0` | Must be `1` to acknowledge a mock exhibition run. |
-| `EVOLVING_MODEL_ID` | `stabilityai/sd-turbo` | Hugging Face ID or readable local model path. |
+| `EVOLVING_MODEL_ID` | `stabilityai/sd-turbo` | Hugging Face ID or local Diffusers directory containing `model_index.json`. |
 | `EVOLVING_VISUAL_HOST` / `EVOLVING_VISUAL_PORT` | `127.0.0.1` / `8000` | Visual service listener. |
 | `EVOLVING_VISUAL_URL` | derived from host/port | URL passed to Swift and used for health checks. |
 | `EVOLVING_ORIGINAL_IMAGE` | unset | Optional readable original painting path. |
@@ -336,6 +336,7 @@ config file. Export stable site values in the operator shell or launch wrapper.
 | `EVOLVING_PREVENT_SLEEP` | `1` | Run the app under non-persistent `caffeinate -dimsu`. |
 | `EVOLVING_STARTUP_TIMEOUT` | `180` | Seconds allowed for real model and SuperDirt startup. |
 | `EVOLVING_INITIAL_GENERATION_TIMEOUT` | `180` | Seconds allowed for Swift to complete its first generation. |
+| `EVOLVING_AUDIO_HEARTBEAT_MAX_AGE` | `10` | Maximum age in seconds for observed `/dirt/play` activity. |
 | `EVOLVING_RUNTIME_DIR` | `/tmp/evolving-impressionist-$UID` | PID/state/FIFO directory. |
 | `EVOLVING_LOG_DIR` | runtime directory `logs` | Persistent-for-session component logs. |
 | `EVOLVING_DIAGNOSTICS` | forced to `1` by launcher | Generation and OSC counters used by status/endurance. |
@@ -343,9 +344,14 @@ config file. Export stable site values in the operator shell or launch wrapper.
 
 `status-installation.sh` distinguishes HTTP/backend health, Swift process and
 generation/OSC counters, SuperDirt's completed startup marker, Tidal's loaded
-patterns, and observed bridge forwarding. It deliberately does not call audio
-healthy based on a PID: speaker audibility remains the final manual operator
-check.
+patterns, observed bridge forwarding, and a fresh `/dirt/play` receive
+heartbeat written only when SuperCollider sees actual Tidal events. This proves
+current audio transport, not physical output: audio-device selection, speaker
+level, and perceived audibility remain final manual operator checks.
+
+Runtime process state is stored as mode-`0600` JSON under
+`EVOLVING_RUNTIME_DIR`. Status and stop read individual JSON fields and never
+evaluate operator-derived paths or URLs as shell source.
 
 ### Startup architecture
 
