@@ -40,6 +40,21 @@ Then use this single authoritative startup command from a stopped state:
 ./scripts/start-installation.sh
 ```
 
+The lifecycle scripts automatically load repository-local settings from
+`.env`. For a visual-only development setup using the real Diffusers backend,
+create it once from the tracked example and then use the same short startup
+command:
+
+```sh
+cp .env.example .env
+./scripts/start-installation.sh
+```
+
+`.env` is ignored by Git. Exported shell variables take precedence, so a
+one-off override such as `EVOLVING_GENERATION_INTERVAL=10` does not require
+editing the file. The loader accepts literal `KEY=value` assignments and does
+not execute shell expansion or command substitution.
+
 Startup fails closed if a required prerequisite, configured port, exact visual
 backend, SuperDirt startup marker, Tidal pattern load, or Swift process is
 unavailable. Exhibition startup defaults to the real `diffusers` backend and
@@ -339,14 +354,15 @@ it reports failure.
 
 ### Operator configuration
 
-All operator configuration uses environment variables; there is no competing
-config file. Export stable site values in the operator shell or launch wrapper.
+All operator configuration uses environment variables. Set stable site values
+in the repository-local `.env` file or export them from the operator shell or
+launch wrapper; exported values take precedence.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `EVOLVING_BACKEND` | `diffusers` in launcher | Exact required backend (`diffusers` or explicitly allowed `mock`). |
 | `EVOLVING_ALLOW_MOCK_EXHIBITION` | `0` | Must be `1` to acknowledge a mock exhibition run. |
-| `EVOLVING_MODEL_ID` | `stabilityai/sd-turbo` | Hugging Face ID or local Diffusers directory containing `model_index.json`. |
+| `EVOLVING_MODEL_ID` | `stabilityai/sdxl-turbo` | Hugging Face ID or local Diffusers directory containing `model_index.json`. |
 | `EVOLVING_VISUAL_HOST` / `EVOLVING_VISUAL_PORT` | `127.0.0.1` / `8000` | Visual service listener. |
 | `EVOLVING_VISUAL_URL` | derived from host/port | URL passed to Swift and used for health checks. |
 | `EVOLVING_ORIGINAL_IMAGE` | bundled Monet *Water Lilies* | Optional readable original painting override; an invalid explicit path fails closed. |
