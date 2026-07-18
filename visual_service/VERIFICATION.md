@@ -88,9 +88,11 @@ The verifier completed two Swift `VisualAPIClient` requests, required
 `image/png` plus a PNG signature, and decoded both responses with AppKit
 `NSImage`. It then sent a deliberately invalid raster reference, received a
 controlled HTTP 400 JSON error, and confirmed `/health` remained available.
-The retained-frame check passed. The application `VisualService` updates its
-image and generation ID only after successful base64 and `NSImage` decoding, so
-this error path leaves the prior valid visual intact.
+The verifier then exercised the actual application `VisualService` through an
+injected client: one valid raster established `currentImage` and its generation
+ID, and the following request failed. It confirmed the same `NSImage` instance,
+generation ID, and transition counter remained in place while status changed to
+failed. This directly verifies that the prior valid visual is retained.
 
 An injected backend failure test separately confirmed unexpected generation
 exceptions return controlled HTTP 500 JSON rather than terminating the server.

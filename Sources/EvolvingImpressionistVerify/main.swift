@@ -14,6 +14,25 @@ private final class OSCCollector: @unchecked Sendable {
     func snapshot() -> [(String, Float)] { lock.lock(); defer { lock.unlock() }; return messages }
 }
 
+private actor FailingAfterOneVisualClient: VisualAPIProviding {
+    private let successfulResponse: VisualGenerationResponse
+    private var generationCount = 0
+
+    init(successfulResponse: VisualGenerationResponse) {
+        self.successfulResponse = successfulResponse
+    }
+
+    func health() async throws -> VisualHealthResponse {
+        VisualHealthResponse(ok: true, backend: successfulResponse.backend)
+    }
+
+    func generate(_ request: VisualGenerationRequest) async throws -> VisualGenerationResponse {
+        generationCount += 1
+        if generationCount == 1 { return successfulResponse }
+        throw URLError(.cannotConnectToHost)
+    }
+}
+
 @main
 struct VerificationRunner {
     static func main() async {
@@ -155,18 +174,30 @@ struct VerificationRunner {
             let afterFailureHealth = try await client.health()
             try require(afterFailureHealth.ok && afterFailureHealth.backend == "diffusers", "real backend crashed after a controlled generation failure")
         }
+        try await verifyVisualServiceRetention(successfulResponse: second)
+        print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles and real VisualService retained-frame failure handling")
+    }
 
-        let unavailable = VisualAPIClient(baseURL: URL(string: "http://127.0.0.1:1")!)
-        let retainedFrame = secondData
-        do {
-            _ = try await unavailable.generate(.init(state: WorldState(), reference: .init()))
-            throw VerificationFailure(description: "unavailable visual service unexpectedly succeeded")
-        } catch is VerificationFailure {
-            throw VerificationFailure(description: "unavailable visual service unexpectedly succeeded")
-        } catch {
-            // Expected: callers receive a recoverable error, not a process failure.
+    @MainActor
+    private static func verifyVisualServiceRetention(successfulResponse: VisualGenerationResponse) async throws {
+        let visual = VisualService(
+            client: FailingAfterOneVisualClient(successfulResponse: successfulResponse),
+            originalImagePath: nil
+        )
+        await visual.generate(for: WorldState())
+        guard let imageBeforeFailure = visual.currentImage else {
+            throw VerificationFailure(description: "VisualService did not accept the valid initial frame")
         }
-        try require(retainedFrame == secondData, "last valid visual was not retained after failure")
-        print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles and retained-frame failure handling")
+        let generationBeforeFailure = visual.previousGenerationID
+        let transitionBeforeFailure = visual.transitionID
+
+        await visual.generate(for: WorldState())
+
+        try require(visual.currentImage === imageBeforeFailure, "VisualService replaced the valid image after a request failure")
+        try require(visual.previousGenerationID == generationBeforeFailure, "VisualService replaced the generation ID after a request failure")
+        try require(visual.transitionID == transitionBeforeFailure, "VisualService advanced its transition after a request failure")
+        if case .failed = visual.status {} else {
+            throw VerificationFailure(description: "VisualService did not report the request failure")
+        }
     }
 }
