@@ -20,8 +20,9 @@ import uuid
 
 
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
-DEFAULT_DIFFUSERS_MODEL = "stabilityai/sd-turbo"
-DEFAULT_IMAGE_SIZE = 512
+DEFAULT_DIFFUSERS_MODEL = "stabilityai/sdxl-turbo"
+DEFAULT_IMAGE_WIDTH = 1024
+DEFAULT_IMAGE_HEIGHT = 576
 DEFAULT_GENERATION_HISTORY_LIMIT = 16
 
 
@@ -78,7 +79,13 @@ def prompt_for(state: dict[str, float]) -> str:
     temperature = "cool blue-green" if state["warmth"] < .4 else "amber and rose" if state["warmth"] > .65 else "pearl and lavender"
     gesture = "restless sweeping" if state["motion"] > .65 else "slow visible" if state["motion"] > .35 else "quiet delicate"
     mood = "unsettled high-contrast" if state["tension"] > .65 else "serene balanced" if state["tension"] < .35 else "expectant"
-    return f"{light} {temperature} impressionist painting, {gesture} brush strokes, {mood} atmosphere, abstraction {state['abstraction']:.2f}, preserve the original composition, no hard scene cut"
+    return (
+        f"museum-quality Impressionist oil painting, {light} {temperature} palette, "
+        f"layered broken-color paint and {gesture} brush strokes, subtle woven canvas texture, "
+        f"{mood} atmosphere, abstraction {state['abstraction']:.2f}, preserve the exact subjects, "
+        "horizon, spatial arrangement, and underlying composition of the reference painting, "
+        "one continuous evolving artwork, no new scene, no hard scene cut, no text, no frame"
+    )
 
 
 class MockBackend:
@@ -122,14 +129,60 @@ class DiffusionSettings:
     seed: int
 
 
-def diffusion_settings(state: dict[str, float], sequence: int, turbo: bool) -> DiffusionSettings:
+@dataclass(frozen=True)
+class DriftConfiguration:
+    original_anchor_low: float = 0.72
+    original_anchor_high: float = 0.50
+    output_anchor_low: float = 0.16
+    output_anchor_high: float = 0.08
+    pullback_interval: int = 5
+    pullback_boost: float = 0.10
+
+    def __post_init__(self):
+        weights = (
+            self.original_anchor_low,
+            self.original_anchor_high,
+            self.output_anchor_low,
+            self.output_anchor_high,
+            self.pullback_boost,
+        )
+        if any(not 0 <= value <= 1 for value in weights):
+            raise BackendUnavailable("drift-control weights must be within 0...1")
+        if self.original_anchor_low < self.original_anchor_high:
+            raise BackendUnavailable("low-abstraction original anchor must not be weaker than high-abstraction anchor")
+        if self.output_anchor_low < self.output_anchor_high:
+            raise BackendUnavailable("low-abstraction output anchor must not be weaker than high-abstraction anchor")
+        if self.pullback_interval < 0:
+            raise BackendUnavailable("pull-back interval must be zero or positive")
+
+
+def _interpolate(low_abstraction: float, high_abstraction: float, abstraction: float) -> float:
+    return low_abstraction + (high_abstraction - low_abstraction) * abstraction
+
+
+def diffusion_settings(
+    state: dict[str, float],
+    sequence: int,
+    turbo: bool,
+    drift: DriftConfiguration | None = None,
+) -> DiffusionSettings:
     """Map normalized world state to bounded, model-safe diffusion controls."""
-    strength = min(0.78, 0.25 + state["abstraction"] * 0.42 + state["motion"] * 0.10)
+    drift = drift or DriftConfiguration()
+    # Keep Turbo below the two-effective-step boundary. At four inference
+    # steps, strength >= 0.5 can replace the scene abruptly instead of evolving
+    # its paint surface.
+    strength = min(0.49, 0.25 + state["abstraction"] * 0.18 + state["motion"] * 0.06)
     steps = 4 if turbo else max(12, round(16 + state["abstraction"] * 8 + state["motion"] * 4))
-    # SD-Turbo is explicitly trained without classifier-free guidance.
+    # Turbo checkpoints are explicitly trained without classifier-free guidance.
     guidance = 0.0 if turbo else 3.5 + state["tension"] * 3.0
-    # Every iterative source retains at least 30% of the original painting.
-    original_weight = 0.55 - state["abstraction"] * 0.25
+    original_weight = _interpolate(
+        drift.original_anchor_low,
+        drift.original_anchor_high,
+        state["abstraction"],
+    )
+    generation_number = sequence + 1
+    if drift.pullback_interval and generation_number % drift.pullback_interval == 0:
+        original_weight = min(0.90, original_weight + drift.pullback_boost)
     state_key = ":".join(f"{state[key]:.4f}" for key in PARAMETERS)
     seed_key = f"{state_key}:{sequence}:{round(state['motion'] * 1000)}"
     seed = int(hashlib.sha256(seed_key.encode()).hexdigest()[:8], 16)
@@ -162,8 +215,9 @@ class DiffusersBackend:
         self,
         model_id: str = DEFAULT_DIFFUSERS_MODEL,
         *,
-        width: int = DEFAULT_IMAGE_SIZE,
-        height: int = DEFAULT_IMAGE_SIZE,
+        width: int = DEFAULT_IMAGE_WIDTH,
+        height: int = DEFAULT_IMAGE_HEIGHT,
+        drift: DriftConfiguration | None = None,
         pipeline=None,
         torch_module=None,
         device: str | None = None,
@@ -173,7 +227,8 @@ class DiffusersBackend:
         self.model_id = model_id
         self.width = width
         self.height = height
-        self.turbo = model_id.rstrip("/").endswith("sd-turbo")
+        self.turbo = model_id.rstrip("/").endswith("turbo")
+        self.drift = drift or DriftConfiguration()
         self._sequence = 0
         self._lock = threading.Lock()
 
@@ -211,11 +266,20 @@ class DiffusersBackend:
             "width": self.width,
             "height": self.height,
             "mediaType": "image/png",
+            "resizeMode": "center-crop",
+            "driftControl": {
+                "originalAnchorLowAbstraction": self.drift.original_anchor_low,
+                "originalAnchorHighAbstraction": self.drift.original_anchor_high,
+                "outputAnchorLowAbstraction": self.drift.output_anchor_low,
+                "outputAnchorHighAbstraction": self.drift.output_anchor_high,
+                "pullbackInterval": self.drift.pullback_interval,
+                "pullbackBoost": self.drift.pullback_boost,
+            },
         }
 
     def _source_image(self, state: dict[str, float], original: bytes | None, previous: bytes | None, settings: DiffusionSettings):
         try:
-            from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+            from PIL import Image, ImageOps, UnidentifiedImageError
         except ImportError as error:
             raise BackendUnavailable("diffusers backend requires Pillow") from error
         if not original and not previous:
@@ -231,19 +295,26 @@ class DiffusersBackend:
         previous_image = ImageOps.fit(previous_image, size, method=Image.Resampling.LANCZOS)
         source = Image.blend(previous_image, original_image, settings.original_weight)
 
-        # Brightness controls exposure; warmth scales red/blue color temperature.
-        source = ImageEnhance.Brightness(source).enhance(0.75 + state["brightness"] * 0.55)
-        red, green, blue = source.split()
+        return source
+
+    @staticmethod
+    def _grade_image(image, state: dict[str, float]):
+        from PIL import Image, ImageEnhance
+
+        # Deterministic finishing makes these controls reliable even when a model
+        # responds weakly to the equivalent prompt language.
+        image = ImageEnhance.Brightness(image).enhance(0.82 + state["brightness"] * 0.36)
+        red, green, blue = image.split()
         warmth = state["warmth"] - 0.5
-        red = red.point(lambda value: max(0, min(255, value * (1.0 + warmth * 0.30))))
-        blue = blue.point(lambda value: max(0, min(255, value * (1.0 - warmth * 0.30))))
-        source = Image.merge("RGB", (red, green, blue))
-        # Tension controls local contrast in addition to prompt instability/guidance.
-        return ImageEnhance.Contrast(source).enhance(0.80 + state["tension"] * 0.65)
+        red = red.point(lambda value: max(0, min(255, value * (1.0 + warmth * 0.22))))
+        blue = blue.point(lambda value: max(0, min(255, value * (1.0 - warmth * 0.22))))
+        image = Image.merge("RGB", (red, green, blue))
+        image = ImageEnhance.Contrast(image).enhance(0.88 + state["tension"] * 0.30)
+        return ImageEnhance.Sharpness(image).enhance(0.92 + state["tension"] * 0.22)
 
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
         with self._lock:
-            settings = diffusion_settings(state, self._sequence, self.turbo)
+            settings = diffusion_settings(state, self._sequence, self.turbo, self.drift)
             self._sequence += 1
             source = self._source_image(state, original, previous, settings)
             options = {
@@ -256,6 +327,22 @@ class DiffusersBackend:
             if self._torch is not None:
                 options["generator"] = self._torch.Generator(device="cpu").manual_seed(settings.seed)
             output = self.pipeline(**options).images[0].convert("RGB")
+            if original:
+                from PIL import Image, ImageOps
+
+                original_image = Image.open(io.BytesIO(original)).convert("RGB")
+                original_image = ImageOps.fit(
+                    original_image,
+                    (self.width, self.height),
+                    method=Image.Resampling.LANCZOS,
+                )
+                output_anchor = _interpolate(
+                    self.drift.output_anchor_low,
+                    self.drift.output_anchor_high,
+                    state["abstraction"],
+                )
+                output = Image.blend(output, original_image, output_anchor)
+            output = self._grade_image(output, state)
         encoded = io.BytesIO()
         output.save(encoded, format="PNG")
         return GenerationResult(encoded.getvalue(), "image/png", prompt_for(state))
@@ -355,11 +442,19 @@ def configured_backend() -> VisualBackend:
     if mode == "diffusers":
         model_id = os.environ.get("EVOLVING_MODEL_ID", DEFAULT_DIFFUSERS_MODEL)
         try:
-            width = int(os.environ.get("EVOLVING_IMAGE_WIDTH", str(DEFAULT_IMAGE_SIZE)))
-            height = int(os.environ.get("EVOLVING_IMAGE_HEIGHT", str(DEFAULT_IMAGE_SIZE)))
+            width = int(os.environ.get("EVOLVING_IMAGE_WIDTH", str(DEFAULT_IMAGE_WIDTH)))
+            height = int(os.environ.get("EVOLVING_IMAGE_HEIGHT", str(DEFAULT_IMAGE_HEIGHT)))
+            drift = DriftConfiguration(
+                original_anchor_low=float(os.environ.get("EVOLVING_ORIGINAL_ANCHOR_LOW", "0.72")),
+                original_anchor_high=float(os.environ.get("EVOLVING_ORIGINAL_ANCHOR_HIGH", "0.50")),
+                output_anchor_low=float(os.environ.get("EVOLVING_OUTPUT_ANCHOR_LOW", "0.16")),
+                output_anchor_high=float(os.environ.get("EVOLVING_OUTPUT_ANCHOR_HIGH", "0.08")),
+                pullback_interval=int(os.environ.get("EVOLVING_PULLBACK_INTERVAL", "5")),
+                pullback_boost=float(os.environ.get("EVOLVING_PULLBACK_BOOST", "0.10")),
+            )
         except ValueError as error:
-            raise BackendUnavailable("EVOLVING_IMAGE_WIDTH and EVOLVING_IMAGE_HEIGHT must be integers") from error
-        return DiffusersBackend(model_id, width=width, height=height)
+            raise BackendUnavailable("diffusion dimensions and drift controls must be numeric") from error
+        return DiffusersBackend(model_id, width=width, height=height, drift=drift)
     raise BackendUnavailable(f"unknown EVOLVING_BACKEND: {mode}")
 
 
