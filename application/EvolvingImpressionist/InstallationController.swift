@@ -12,7 +12,7 @@ final class InstallationController: ObservableObject {
     private let generationInterval: TimeInterval
     private let diagnosticsEnabled: Bool
 
-    init(generationInterval: TimeInterval = Double(ProcessInfo.processInfo.environment["EVOLVING_GENERATION_INTERVAL"] ?? "45") ?? 45) {
+    init(generationInterval: TimeInterval = Double(ProcessInfo.processInfo.environment["EVOLVING_GENERATION_INTERVAL"] ?? "5") ?? 5) {
         self.generationInterval = max(1, generationInterval)
         let environment = ProcessInfo.processInfo.environment
         self.diagnosticsEnabled = environment["EVOLVING_DIAGNOSTICS"] == "1"

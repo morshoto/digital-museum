@@ -72,13 +72,25 @@ class DiffusionMappingTests(unittest.TestCase):
         self.assertGreaterEqual(calm.num_inference_steps * calm.strength, 1)
         self.assertLess(active.strength, .5)
 
+    def test_five_second_stream_strength_envelope(self):
+        normal = diffusion_settings(VALID_STATE, 0, turbo=True)
+        maximum = diffusion_settings(
+            {key: 1 for key in VALID_STATE},
+            0,
+            turbo=True,
+        )
+        self.assertGreaterEqual(normal.strength, .25)
+        self.assertLessEqual(normal.strength, .32)
+        self.assertGreaterEqual(maximum.strength, .38)
+        self.assertLessEqual(maximum.strength, .42)
+
     def test_abstraction_caps_divergence_despite_high_motion_and_tension(self):
         constrained = diffusion_settings(
             dict(VALID_STATE, abstraction=0, motion=1, tension=1),
             0,
             turbo=True,
         )
-        self.assertLessEqual(constrained.strength, .30)
+        self.assertLessEqual(constrained.strength, .28)
         self.assertGreaterEqual(constrained.original_weight, .55)
 
     def test_artistic_qualities_shape_change_inside_abstraction_allowance(self):
@@ -92,7 +104,7 @@ class DiffusionMappingTests(unittest.TestCase):
             0,
             turbo=True,
         )
-        abstraction_cap = .30 + .6 * .19
+        abstraction_cap = .28 + .6 * .14
         self.assertGreater(active.strength, quiet.strength)
         self.assertLessEqual(active.strength, abstraction_cap)
         self.assertLessEqual(quiet.strength, abstraction_cap)
@@ -112,10 +124,10 @@ class DiffusionMappingTests(unittest.TestCase):
         high = diffusion_settings(dict(VALID_STATE, abstraction=1), 0, turbo=True)
         self.assertGreater(low.original_weight, high.original_weight)
 
-    def test_every_fifth_generation_pulls_back_toward_original(self):
-        fourth = diffusion_settings(VALID_STATE, 3, turbo=True)
-        fifth = diffusion_settings(VALID_STATE, 4, turbo=True)
-        self.assertAlmostEqual(fifth.original_weight - fourth.original_weight, .10)
+    def test_every_eighteenth_generation_pulls_back_toward_original(self):
+        seventeenth = diffusion_settings(VALID_STATE, 16, turbo=True)
+        eighteenth = diffusion_settings(VALID_STATE, 17, turbo=True)
+        self.assertAlmostEqual(eighteenth.original_weight - seventeenth.original_weight, .10)
 
     def test_drift_configuration_rejects_inverted_abstraction_mapping(self):
         with self.assertRaisesRegex(RuntimeError, "low-abstraction original anchor"):
@@ -210,7 +222,7 @@ class DiffusersBackendTests(unittest.TestCase):
                 "originalAnchorHighAbstraction": .50,
                 "outputAnchorLowAbstraction": .16,
                 "outputAnchorHighAbstraction": .08,
-                "pullbackInterval": 5,
+                "pullbackInterval": 18,
                 "pullbackBoost": .10,
             },
         })

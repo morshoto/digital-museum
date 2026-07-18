@@ -11,6 +11,7 @@
 
 ## Design and verification records
 
+- [ADR 0001: Continuous Diffusion stream](adr/0001-continuous-diffusion-stream.md)
 - [Shared artistic state](SHARED_ARTISTIC_STATE.md)
 - [Phase C verification](PHASE_C_VERIFICATION.md)
 - [Operator runtime verification](OPERATOR_VERIFICATION.md)

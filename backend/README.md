@@ -95,9 +95,9 @@ Raw `warmth` retains red/blue source color-temperature scaling and palette
 language. The generation sequence still changes the deterministic seed so
 successive frames evolve without adding an independent artistic-state input.
 Abstraction remains a hard divergence constraint: strength is capped by
-`0.30 + 0.19 × abstraction` and never reaches the global `0.49` Turbo
-scene-replacement boundary. Fluidity and instability shape deformation only
-inside that allowance.
+`0.28 + 0.14 × abstraction` and has a global `0.42` ceiling. Fluidity and
+instability shape deformation only inside that allowance. This lower
+per-generation change is calibrated for the five-second continuous stream.
 
 For SDXL Turbo, classifier-free guidance is correctly disabled. Four steps and
 a minimum strength of 0.25 satisfy the model's Img2Img requirement that
@@ -106,8 +106,9 @@ a minimum strength of 0.25 satisfy the model's Img2Img requirement that
 Each sequential source is a blend of the previous generated image and the
 original painting. Continuous original weight ranges from 72% at zero
 abstraction to 50% at maximum abstraction, with serenity adding up to four
-percentage points of preservation. Every fifth generation adds a 10% pull-back,
-and the generated result receives a second 16%→8% original blend before
+percentage points of preservation. Every eighteenth generation adds a 10%
+pull-back (about every 90 seconds at the default cadence), and the generated
+result receives a second 16%→8% original blend before
 deterministic artistic-state finishing. These controls stop repeated Img2Img
 from becoming an unanchored random walk while still allowing visible evolution.
 A backend lock prevents concurrent access to the non-thread-safe MPS pipeline.
@@ -119,7 +120,7 @@ EVOLVING_ORIGINAL_ANCHOR_LOW=0.72
 EVOLVING_ORIGINAL_ANCHOR_HIGH=0.50
 EVOLVING_OUTPUT_ANCHOR_LOW=0.16
 EVOLVING_OUTPUT_ANCHOR_HIGH=0.08
-EVOLVING_PULLBACK_INTERVAL=5
+EVOLVING_PULLBACK_INTERVAL=18
 EVOLVING_PULLBACK_BOOST=0.10
 ```
 

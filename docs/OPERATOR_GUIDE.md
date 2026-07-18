@@ -41,11 +41,12 @@ macOS Space. Confirm the intended display is primary before launch.
 - `Cmd-F` toggles the borderless exhibition presentation.
 
 The last valid artwork remains visible during service or decoding failures.
-Later cycles retry. Valid replacement frames blend over the retained frame while
-subtle deterministic scale and drift keep the painting moving between
-generations. A replacement arriving during an active transition starts from the
-currently visible composite rather than resetting opacity. UDP does not require
-a receiver, so disabling the music stack does not stop visual generation.
+Later cycles retry. The warm Diffusion pipeline produces a new evolution about
+every five seconds; valid frames blend for 1.2 seconds over the retained frame.
+Subtle scale and drift are only a stabilizing accent. A replacement arriving
+during an active transition starts from the currently visible composite rather
+than resetting opacity. UDP does not require a receiver, so disabling the music
+stack does not stop visual generation.
 
 For unattended operation, the launcher forces `EVOLVING_DIAGNOSTICS=1` and
 defaults to `caffeinate -dimsu`. Connect the Mac to AC power and manually verify
@@ -68,7 +69,7 @@ saver settings before admitting visitors.
 | `EVOLVING_TIDAL_CONTROL_PORT` | `6010` | Bridge destination for Tidal `/ctrl` messages. |
 | `EVOLVING_DIRT_PORT` | `57120` | Tidal `/dirt/play` destination used by SuperDirt. |
 | `EVOLVING_REQUIRE_MUSIC` | `1` | Require the complete music runtime during startup. |
-| `EVOLVING_GENERATION_INTERVAL` | `45` | Seconds between Swift generation attempts. |
+| `EVOLVING_GENERATION_INTERVAL` | `5` | Seconds between non-overlapping Swift generation attempts. |
 | `EVOLVING_PREVENT_SLEEP` | `1` | Run the app under non-persistent `caffeinate`. |
 | `EVOLVING_STARTUP_TIMEOUT` | `180` | Seconds allowed for model and SuperDirt startup. |
 | `EVOLVING_INITIAL_GENERATION_TIMEOUT` | `180` | Seconds allowed for the first generation. |

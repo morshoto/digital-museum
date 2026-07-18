@@ -51,6 +51,27 @@ private actor SequencedVisualClient: VisualAPIProviding {
     func receivedReferences() -> [VisualReference] { references }
 }
 
+private actor SlowVisualClient: VisualAPIProviding {
+    private let response: VisualGenerationResponse
+    private var requests: [VisualGenerationRequest] = []
+
+    init(response: VisualGenerationResponse) {
+        self.response = response
+    }
+
+    func health() async throws -> VisualHealthResponse {
+        VisualHealthResponse(ok: true, backend: response.backend)
+    }
+
+    func generate(_ request: VisualGenerationRequest) async throws -> VisualGenerationResponse {
+        requests.append(request)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        return response
+    }
+
+    func receivedStates() -> [WorldState] { requests.map(\.state) }
+}
+
 @main
 struct VerificationRunner {
     static func main() async {
@@ -61,6 +82,7 @@ struct VerificationRunner {
             try verifyPaintingReferences()
             try await verifyOSC()
             try await verifyOSCWithoutReceiver()
+            try await verifyOneFrameGenerationGate()
             try await verifyVisualIntegration()
             print("PASS: all Swift core and integration checks passed")
         } catch {
@@ -201,6 +223,7 @@ struct VerificationRunner {
     }
 
     private static func verifyVisualTransitionTimeline() throws {
+        try require(VisualTransitionConfiguration.installation.duration == 1.2, "installation crossfade was not tuned for the five-second stream")
         let configuration = VisualTransitionConfiguration(duration: 10)
         var timeline = VisualTransitionTimeline(configuration: configuration)
         let images = (0..<4).map { _ in NSImage(size: NSSize(width: 16, height: 16)) }
@@ -245,19 +268,19 @@ struct VerificationRunner {
                 let first = timeline.presentationTransform(at: time, worldState: state)
                 let second = timeline.presentationTransform(at: time, worldState: state)
                 try require(first == second, "identical transform input and timestamp were not deterministic")
-                try require((1...1.02).contains(first.scale), "presentation scale escaped 1.00...1.02")
-                try require(abs(first.offsetX) <= 6.000_001 && abs(first.offsetY) <= 6.000_001, "presentation offset escaped the six-point bound")
+                try require((1...1.005).contains(first.scale), "presentation scale escaped 1.00...1.005")
+                try require(abs(first.offsetX) <= 2.000_001 && abs(first.offsetY) <= 2.000_001, "presentation offset escaped the two-point bound")
             }
         }
         let still = timeline.presentationTransform(at: 0, worldState: .init(motion: 0, tension: 0))
         let active = timeline.presentationTransform(at: 0, worldState: .init(motion: 1, tension: 0))
         try require(hypot(active.offsetX, active.offsetY) > hypot(still.offsetX, still.offsetY), "motion did not increase micro-motion magnitude")
-        try require(abs(active.offsetX) <= 6 && abs(active.offsetY) <= 6, "motion exceeded safe micro-motion limits")
+        try require(abs(active.offsetX) <= 2 && abs(active.offsetY) <= 2, "motion exceeded safe micro-motion limits")
 
         let fiveSecondStart = timeline.presentationTransform(at: 0, worldState: .init(motion: 0, tension: 0))
         let fiveSecondEnd = timeline.presentationTransform(at: 5, worldState: .init(motion: 0, tension: 0))
-        try require(hypot(fiveSecondEnd.offsetX - fiveSecondStart.offsetX, fiveSecondEnd.offsetY - fiveSecondStart.offsetY) > 2, "lowest-motion presentation did not accumulate visible change over five seconds")
-        print("PASS: bounded deterministic continuous interpolation, five-second micro-motion, stale-update safety, and rapid A-B-C-D supersession")
+        try require(hypot(fiveSecondEnd.offsetX - fiveSecondStart.offsetX, fiveSecondEnd.offsetY - fiveSecondStart.offsetY) > 0.25, "lowest-motion presentation did not remain gently alive over five seconds")
+        print("PASS: bounded 1.2-second stream transitions, restrained deterministic micro-motion, stale-update safety, and rapid A-B-C-D supersession")
     }
 
     private static func verifyPaintingReferences() throws {
@@ -404,6 +427,38 @@ struct VerificationRunner {
         }
         try await verifyVisualServiceTransitions(first: first, second: second)
         print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles plus retained frames across network/undecodable failures and recovery")
+    }
+
+    @MainActor
+    private static func verifyOneFrameGenerationGate() async throws {
+        let imageURL = try OriginalImageResolver.resolve(environment: [:]).fileURL
+        let imageBase64 = try Data(contentsOf: imageURL).base64EncodedString()
+        let response = VisualGenerationResponse(
+            imageBase64: imageBase64,
+            mediaType: "image/png",
+            generationID: "slow-client-generation",
+            prompt: "verification",
+            backend: "slow-verifier"
+        )
+        let client = SlowVisualClient(response: response)
+        let visual = VisualService(client: client, originalImagePath: imageURL.path)
+        let firstState = WorldState(motion: 0.1)
+        let skippedState = WorldState(motion: 0.5)
+        let nextState = WorldState(motion: 0.9)
+
+        let inFlight = Task { await visual.generate(for: firstState) }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        try require(visual.isGenerating, "slow generation did not enter the in-flight state")
+        await visual.generate(for: skippedState)
+        await inFlight.value
+        let statesAfterOverlap = await client.receivedStates()
+        try require(statesAfterOverlap == [firstState], "overlapping generation was queued or executed")
+
+        await visual.generate(for: nextState)
+        let acceptedStates = await client.receivedStates()
+        try require(acceptedStates == [firstState, nextState], "next accepted generation did not use the latest state")
+        try require(visual.generationSuccessCount == 2 && visual.generationFailureCount == 0, "one-frame generation gate corrupted counters")
+        print("PASS: warm generation gate runs one frame at a time, skips overlap, and accepts the newest subsequent WorldState")
     }
 
     @MainActor

@@ -23,22 +23,26 @@ Later generations combine the same original, the previous generation, and the
 current WorldState. The original remains a persistent drift-control anchor and
 is never replaced by only the previous frame.
 
-`VisualService` publishes each decoded Diffusion result as one atomic
-`VisualFrame`; generation remains asynchronous and does not drive display
-ticks. `VisualTransitionTimeline` independently retains the visible keyframe
-mixture, transition start, adaptive duration, normalized progress, and newest
-target. SwiftUI samples it at display cadence. A smootherstep blend runs for up
-to 30 seconds (or 90% of a shorter observed keyframe interval), while one
-deterministic low-frequency scale-and-drift transform keeps the composite in
-motion between generations. Interrupted transitions freeze their current layer
-weights before accepting a newer target, so stale arrivals and failures cannot
-reset opacity or blank the display.
+The persistent Diffusers pipeline is a continuous generation engine. Swift
+starts at most one request every five seconds, and `VisualService` rejects
+overlap rather than building a queue. Each request samples the newest
+`WorldState` at its start and references both the original painting and the
+last successful generation. Failures retain that generation and the next
+interval retries from the same valid predecessor.
 
-The presentation transform uses no raster processing. `motion` raises its
-amplitude and speed only inside a `1.00...1.02` scale and six-point offset
-envelope; `tension` adds a small deterministic second harmonic. Applying the
-same transform to the complete composite preserves object alignment and avoids
-independent face or object distortion.
+`VisualService` publishes each decoded result as one atomic `VisualFrame`.
+`VisualTransitionTimeline` independently retains the visible keyframe mixture,
+transition start, normalized progress, and newest target. SwiftUI samples it at
+display cadence and uses a 1.2-second smootherstep blend. Interrupted
+transitions freeze their current layer weights before accepting a newer target,
+so stale arrivals cannot reset opacity or blank the display.
+
+The presentation transform is now only a stabilizing accent: `motion` raises
+its amplitude and speed inside a `1.00...1.005` scale and two-point offset
+envelope, while `tension` adds a small deterministic second harmonic. The same
+transform applies to the complete composite, with no raster processing or
+independent object distortion. Diffusion frames—not camera movement—carry the
+visible evolution.
 
 Swift resolves `EVOLVING_ORIGINAL_IMAGE` first as a fail-closed override. When
 it is unset, `PaintingCatalog` selects Monet's *Water Lilies* (1906) from the
@@ -46,7 +50,7 @@ SwiftPM resource bundle. `Bundle.module` provides a real filesystem URL that
 the local Python process can read independently of the working directory.
 
 The SDXL Turbo backend blends original and previous inputs, pulls more strongly
-toward the original every fifth frame, and applies a small post-generation
+toward the original every eighteenth frame, and applies a small post-generation
 anchor. Raw abstraction remains the hard upper bound on visual divergence.
 See [Shared artistic state](SHARED_ARTISTIC_STATE.md) and the
 [visual-service guide](../backend/README.md) for the mappings and drift

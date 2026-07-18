@@ -19,8 +19,41 @@ Date: 2026-07-18 (Asia/Tokyo)
 
 The prior SD-Turbo model card recommends SDXL Turbo for increased quality and
 prompt understanding. SDXL Turbo retains low-step Img2Img and ran comfortably
-inside the installation's 45-second normal generation interval. Its first fp16
-download occupied approximately 6.5 GB in the Hugging Face cache.
+inside the original Phase A 45-second generation interval; the update below
+records the current five-second stream. Its first fp16 download occupied
+approximately 6.5 GB in the Hugging Face cache.
+
+## Continuous-stream verification update
+
+The five-second continuous-stream tuning was verified on the same MPS path
+after the original Phase A measurements. The persistent service generated a
+20-frame linked sequence at 1024×576, followed by all six controlled variants
+and the invalid-reference recovery check:
+
+```sh
+uv run --frozen --extra diffusion python backend/verify_real.py \
+  --url http://127.0.0.1:8895 \
+  --original application/EvolvingImpressionistCore/Resources/Paintings/monet-water-lilies.png \
+  --output-dir /tmp/evolving-continuous-stream-real \
+  --generations 20
+```
+
+- Average generation latency: 3.492 seconds; range 2.779–3.897 seconds.
+- All frames used the original, and frames 2–20 resolved the exact predecessor.
+- Adjacent-frame mean absolute difference averaged 8.813.
+- Original-image difference stayed bounded from 13.380 at generation 1 to
+  13.837 at generation 20; edge correlation moved from 0.7160 to 0.7087.
+- Health reported pullback interval 18 before and after the controlled failure.
+- The report and PNG sequence are under
+  `/tmp/evolving-continuous-stream-real/` on the verification machine.
+
+The Swift application then ran the same service with
+`EVOLVING_GENERATION_INTERVAL=5` for 50 successful displayed generations with
+zero failures. PID-matched fullscreen captures showed repeated real painting
+changes without blank frames or unrelated imagery. The app used a 1.2-second
+blend and the bounded `1.00...1.005`/two-point presentation accent. A concurrent
+verifier request caused one interval to be skipped rather than queued, then the
+next application interval resumed from its latest state as designed.
 
 The reference was the public-domain 425×298 JPEG
 [Claude Monet Water Lilies](https://commons.wikimedia.org/wiki/File:Claude_Monet_Water_Lilies.jpg),
@@ -34,10 +67,10 @@ the original path and the bounded-cache predecessor ID. The backend then:
 1. Center-crops both references to 1024×576.
 2. Blends previous → original with a 72%→50% abstraction-based original
    weight, plus up to 4% additional preservation from serenity.
-3. Adds a 10% original pull-back every fifth successful inference.
+3. Adds a 10% original pull-back every eighteenth successful inference.
 4. Runs SDXL Turbo Img2Img at four steps. Abstraction sets a hard strength cap
-   of `0.30 + abstraction×0.19`; fluidity and instability shape strength only
-   inside that allowance, with a global ceiling of 0.49.
+   of `0.28 + abstraction×0.14`; fluidity and instability shape strength only
+   inside that allowance, with a global ceiling of 0.42.
 5. Blends 16%→8% of the original back into the generated raster.
 6. Applies deterministic brightness, temperature, contrast, and sharpness
    finishing derived from WorldState.
@@ -48,8 +81,9 @@ The final normal/default temporal state was:
 {"brightness":0.55,"warmth":0.50,"abstraction":0.30,"motion":0.35,"tension":0.30}
 ```
 
-The current merged mapping gives this state an Img2Img strength of 0.320,
-continuous original input weight of 0.682 (0.782 every fifth frame), and output
+The current five-second-stream mapping gives this state an Img2Img strength of
+0.302, continuous original input weight of 0.682 (0.782 every eighteenth
+frame), and output
 original weight of 0.136. Seeds change deterministically with state and backend
 sequence.
 
@@ -62,8 +96,10 @@ than a newly recorded 20-frame live run.
 The first tuning used a 0.68 strength ceiling and a 42%/4% high-abstraction
 input/output anchor. The default 20-frame chain was coherent, but manual review
 found that the 0.90-abstraction controlled sample changed the water-lily pond
-into a woodland. That result was rejected. The final 0.49 ceiling and 50%/8%
-high-abstraction anchors below are the rerun after correcting that failure.
+into a woodland. That result was rejected. The recorded rerun below used the
+then-final 0.49 ceiling and 50%/8% high-abstraction anchors. The later
+continuous-stream tuning lowers the ceiling further to 0.42; its exact bounds
+are covered by the current automated suite and live five-second smoke test.
 
 ## Sequential generation result
 
@@ -209,9 +245,9 @@ uv run --frozen --extra diffusion python -m unittest discover \
 
 1. Curate three to five representative paintings and record preferred crop,
    default abstraction, and warmth range per work.
-2. Compare the current SDXL Turbo result with a 10–20-step SDXL Impressionist
-   fine-tune at the same 1024×576 on this M4 Pro, using a strict 45-second budget.
-3. Tune the periodic pull-back cadence between five and eight frames with a
-   curator watching full-speed crossfades, not isolated stills.
+2. Compare the current SDXL Turbo result with a fine-art checkpoint that can
+   stay inside the five-second generation budget at 1024×576 on this M4 Pro.
+3. Tune the periodic pull-back cadence between 12 and 24 frames with a curator
+   watching the continuous stream, not isolated stills.
 4. Add perceptual/semantic monitoring only as a guardrail; retain checkpoint
    contact-sheet review as the artistic acceptance gate.

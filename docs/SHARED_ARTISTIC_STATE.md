@@ -75,16 +75,16 @@ Diffusion strength and source anchoring apply the following additional
 constraints:
 
 ```text
-base_strength = 0.25 + 0.18 * abstraction
-modifier = 0.03 * fluidity + 0.02 * instability
-strength_cap = 0.30 + 0.19 * abstraction
-strength = min(0.49, strength_cap, base_strength + modifier)
+base_strength = 0.25 + 0.135 * abstraction
+modifier = 0.02 * fluidity + 0.015 * instability
+strength_cap = 0.28 + 0.14 * abstraction
+strength = min(0.42, strength_cap, base_strength + modifier)
 
 abstraction_anchor = interpolate(configured_low, configured_high, abstraction)
 original_weight = min(0.90, abstraction_anchor + 0.04 * serenity)
 ```
 
-Consequently, `abstraction = 0` caps strength at `0.30` and retains at least
+Consequently, `abstraction = 0` caps strength at `0.28` and retains at least
 the configured low-abstraction anchor (72% by default) even when motion and
 tension are both maximal. The visual-coherence layer also applies its periodic
 pull-back and bounded post-generation original blend; derived qualities cannot
@@ -109,13 +109,13 @@ evaluated once; changing state never stops or replaces them.
 Swift continues sending raw OSC state at approximately 10 Hz. Tidal reads the
 latest controls inside its continuously running patterns, so audible response
 arrives over the next events and cycles (roughly sub-second to several
-seconds). The visual service samples the same world only when generating a new
-frame, normally every 45 seconds. Swift continuously interpolates valid
-keyframes and applies bounded low-frequency presentation motion between them;
-raw `motion` controls only the safe transform amplitude and speed, while raw
-`tension` contributes a small deterministic second harmonic. Thus both media
-inhabit the same state trajectory while music articulates short changes and
-visuals integrate a slower snapshot instead of moving in lockstep.
+seconds). The visual service samples the newest world state at the start of
+each non-overlapping generation, normally every five seconds. Swift blends each
+valid Diffusion result for 1.2 seconds and applies only a minimal bounded
+presentation transform. Raw `motion` controls that accent's amplitude and
+speed, while raw `tension` contributes a small deterministic second harmonic.
+Thus Diffusion carries the visible evolution while music continues to
+articulate faster events from the same trajectory.
 
 ## Contrasting tuning states
 

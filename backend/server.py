@@ -160,7 +160,7 @@ class DriftConfiguration:
     original_anchor_high: float = 0.50
     output_anchor_low: float = 0.16
     output_anchor_high: float = 0.08
-    pullback_interval: int = 5
+    pullback_interval: int = 18
     pullback_boost: float = 0.10
 
     def __post_init__(self):
@@ -198,10 +198,10 @@ def diffusion_settings(
     # steps, strength >= 0.5 can replace the scene abruptly instead of evolving
     # its paint surface. Abstraction is the hard divergence allowance; shared
     # artistic qualities only shape change inside its bounded headroom.
-    base_strength = 0.25 + state["abstraction"] * 0.18
-    artistic_modifier = artistic.fluidity * 0.03 + artistic.instability * 0.02
-    max_strength_for_abstraction = 0.30 + state["abstraction"] * 0.19
-    strength = min(0.49, max_strength_for_abstraction, base_strength + artistic_modifier)
+    base_strength = 0.25 + state["abstraction"] * 0.135
+    artistic_modifier = artistic.fluidity * 0.02 + artistic.instability * 0.015
+    max_strength_for_abstraction = 0.28 + state["abstraction"] * 0.14
+    strength = min(0.42, max_strength_for_abstraction, base_strength + artistic_modifier)
     steps = 4 if turbo else max(12, round(16 + artistic.fluidity * 8 + artistic.density * 4))
     # Turbo checkpoints are explicitly trained without classifier-free guidance.
     guidance = 0.0 if turbo else 3.5 + artistic.instability * 3.0
@@ -490,7 +490,7 @@ def configured_backend() -> VisualBackend:
                 original_anchor_high=float(os.environ.get("EVOLVING_ORIGINAL_ANCHOR_HIGH", "0.50")),
                 output_anchor_low=float(os.environ.get("EVOLVING_OUTPUT_ANCHOR_LOW", "0.16")),
                 output_anchor_high=float(os.environ.get("EVOLVING_OUTPUT_ANCHOR_HIGH", "0.08")),
-                pullback_interval=int(os.environ.get("EVOLVING_PULLBACK_INTERVAL", "5")),
+                pullback_interval=int(os.environ.get("EVOLVING_PULLBACK_INTERVAL", "18")),
                 pullback_boost=float(os.environ.get("EVOLVING_PULLBACK_BOOST", "0.10")),
             )
         except ValueError as error:

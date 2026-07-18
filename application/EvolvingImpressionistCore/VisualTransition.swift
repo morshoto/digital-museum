@@ -9,17 +9,17 @@ public struct VisualTransitionConfiguration: Equatable, Sendable {
     public var maximumOffsetAmplitude: Double
 
     public init(
-        duration: TimeInterval = 30,
-        minimumScale: Double = 1.012,
-        maximumScale: Double = 1.02,
-        minimumOffsetAmplitude: Double = 2.5,
-        maximumOffsetAmplitude: Double = 6
+        duration: TimeInterval = 1.2,
+        minimumScale: Double = 1.004,
+        maximumScale: Double = 1.005,
+        minimumOffsetAmplitude: Double = 0.35,
+        maximumOffsetAmplitude: Double = 2
     ) {
         self.duration = max(0.001, duration)
-        self.minimumScale = min(1.02, max(1, minimumScale))
-        self.maximumScale = min(1.02, max(self.minimumScale, maximumScale))
-        self.minimumOffsetAmplitude = min(6, max(0, minimumOffsetAmplitude))
-        self.maximumOffsetAmplitude = min(6, max(self.minimumOffsetAmplitude, maximumOffsetAmplitude))
+        self.minimumScale = min(1.005, max(1, minimumScale))
+        self.maximumScale = min(1.005, max(self.minimumScale, maximumScale))
+        self.minimumOffsetAmplitude = min(2, max(0, minimumOffsetAmplitude))
+        self.maximumOffsetAmplitude = min(2, max(self.minimumOffsetAmplitude, maximumOffsetAmplitude))
     }
 
     public static let installation = VisualTransitionConfiguration()
@@ -147,7 +147,7 @@ public struct VisualTransitionTimeline {
         // Tension only adds a bounded, lower-amplitude second harmonic.
         let period = interpolate(32, 24, motion)
         let phase = (time / period) * 2 * Double.pi
-        let secondaryWeight = 0.16 * tension
+        let secondaryWeight = 0.08 * tension
         let primaryWeight = 1 - secondaryWeight
         let xWave = primaryWeight * sin(phase) + secondaryWeight * sin(phase * 1.7 + 0.8)
         let yWave = primaryWeight * cos(phase) + secondaryWeight * cos(phase * 1.7 + 0.8)
