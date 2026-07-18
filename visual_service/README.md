@@ -12,18 +12,19 @@ The service keeps two interchangeable backends behind the same HTTP contract:
 From the repository root:
 
 ```sh
-EVOLVING_BACKEND=mock python3 visual_service/server.py
+uv sync --frozen
+EVOLVING_BACKEND=mock uv run --frozen python visual_service/server.py
 ```
 
 ## Reproducible Diffusers installation
 
-Use an arm64 Python 3.10 or newer. The versions exercised by the verification
-report are pinned separately so mock mode still needs no third-party packages.
+`uv` selects the pinned Python 3.13 runtime and resolves the versions exercised
+by the verification report from `pyproject.toml` and `uv.lock`. The diffusion
+stack remains an optional extra, so mock mode still installs no third-party
+packages.
 
 ```sh
-python3 -m venv .venv-diffusers
-.venv-diffusers/bin/python -m pip install --upgrade pip
-.venv-diffusers/bin/python -m pip install -r visual_service/requirements-diffusers.txt
+uv sync --frozen --extra diffusion
 ```
 
 Start the real backend:
@@ -31,7 +32,7 @@ Start the real backend:
 ```sh
 HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
-.venv-diffusers/bin/python visual_service/server.py
+uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
 The first launch downloads approximately 2.6 GB of fp16 model components.
@@ -42,7 +43,7 @@ default only when intentionally testing another Img2Img-compatible checkpoint:
 ```sh
 EVOLVING_MODEL_ID=/absolute/path/or/hugging-face-id \
 EVOLVING_BACKEND=diffusers \
-.venv-diffusers/bin/python visual_service/server.py
+uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
 `EVOLVING_IMAGE_WIDTH` and `EVOLVING_IMAGE_HEIGHT` default to 512 and must be
@@ -100,15 +101,15 @@ model, device, output dimensions, and raster media type.
 Run backend tests in the real environment:
 
 ```sh
-.venv-diffusers/bin/python -m py_compile visual_service/server.py visual_service/verify_real.py
-.venv-diffusers/bin/python -m unittest discover -s visual_service/tests -v
+uv run --frozen --extra diffusion python -m py_compile visual_service/server.py visual_service/verify_real.py
+uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
 ```
 
 With the real service running, exercise two sequential generations and decode
 the returned PNGs with Pillow:
 
 ```sh
-.venv-diffusers/bin/python visual_service/verify_real.py \
+uv run --frozen --extra diffusion python visual_service/verify_real.py \
   --original /absolute/path/to/painting.jpg
 ```
 

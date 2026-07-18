@@ -1,5 +1,6 @@
 PLAN.md
 .build/
+.venv/
 .venv-diffusers/
 __pycache__/
 *.pyc

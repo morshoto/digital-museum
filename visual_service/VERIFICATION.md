@@ -19,15 +19,17 @@ SHA-256 `492bdf553c3d4810d27d7f67968e9121b2c8a8c91e5ff4d6f41fece1a7a24366`.
 
 ## Installation and launch
 
+The original verification used an equivalent pinned `venv` environment. The
+project has since migrated that dependency set to `pyproject.toml` and
+`uv.lock`; the current reproduction commands are:
+
 ```sh
-python3 -m venv .venv-diffusers
-.venv-diffusers/bin/python -m pip install --upgrade pip
-.venv-diffusers/bin/python -m pip install -r visual_service/requirements-diffusers.txt
+uv sync --frozen --extra diffusion
 
 HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
 EVOLVING_VISUAL_PORT=8891 \
-.venv-diffusers/bin/python visual_service/server.py
+uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
 The initial fp16 component fetch was approximately 2.6 GB. Model load completed
@@ -43,10 +45,10 @@ used that offline-started service.
 
 ## Real and sequential generation
 
-Executed:
+Current equivalent of the command used for the recorded run:
 
 ```sh
-.venv-diffusers/bin/python visual_service/verify_real.py \
+uv run --frozen --extra diffusion python visual_service/verify_real.py \
   --url http://127.0.0.1:8891 \
   --original /tmp/evolving-diffusion-smoke/original.jpg \
   --output-dir /tmp/evolving-diffusion-final
@@ -100,10 +102,10 @@ exceptions return controlled HTTP 500 JSON rather than terminating the server.
 ## Regression commands
 
 ```sh
-.venv-diffusers/bin/python -m py_compile \
+uv run --frozen --extra diffusion python -m py_compile \
   visual_service/server.py visual_service/verify_real.py \
   visual_service/tests/test_server.py visual_service/tests/test_diffusers_backend.py
-.venv-diffusers/bin/python -m unittest discover -s visual_service/tests -v
+uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
 ./scripts/verify.sh
 ```
 

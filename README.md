@@ -17,18 +17,19 @@ music control over OSC.
 
 - Apple Silicon macOS 13 or newer.
 - Swift 5.9 or newer (`swift --version`).
-- Python 3.10 or newer; mock mode uses only the standard library.
+- `uv` 0.10 or newer. The Python 3.13 runtime and dependency graph are defined
+  by `.python-version`, `pyproject.toml`, and `uv.lock`.
 - Optional for music: SuperCollider, SuperDirt, TidalCycles, and suitable samples.
-- Optional for real images: the pinned environment in
-  `visual_service/requirements-diffusers.txt` and approximately 5 GB of free
-  runtime memory for the proven SD-Turbo/MPS path.
+- Optional for real images: the `diffusion` project extra and approximately
+  5 GB of free runtime memory for the proven SD-Turbo/MPS path.
 
 ## Run the MVP
 
 Start the visual service in mock mode:
 
 ```sh
-EVOLVING_BACKEND=mock python3 visual_service/server.py
+uv sync --frozen
+EVOLVING_BACKEND=mock uv run --frozen python visual_service/server.py
 ```
 
 Then launch the macOS application:
@@ -70,13 +71,11 @@ EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg swift run EvolvingImpress
 To install and use the real backend:
 
 ```sh
-python3 -m venv .venv-diffusers
-.venv-diffusers/bin/python -m pip install --upgrade pip
-.venv-diffusers/bin/python -m pip install -r visual_service/requirements-diffusers.txt
+uv sync --frozen --extra diffusion
 
 HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
-.venv-diffusers/bin/python visual_service/server.py
+uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
 The proven default is `stabilityai/sd-turbo` at 512×512 on Apple Silicon MPS.
@@ -158,14 +157,15 @@ Run all automated checks:
 ./scripts/verify.sh
 ```
 
-This runs the dependency-free Python service tests, compiles every Swift target, starts the
-mock service, checks parameter bounds/change/configuration/phase/determinism/
-override behavior, captures all five messages with a real local UDP receiver,
-performs two successive Swift-to-service generations, decodes both results
-with AppKit, and verifies a service connection failure is recoverable. When
-`sclang` is installed, it also receives all five Swift-side OSC paths and
-asserts the five normalized `/ctrl` messages forwarded to Tidal's port. Run
-that focused check directly with:
+This syncs the locked mock environment with `uv`, compiles and tests the Python
+service through `uv`, compiles every Swift target, starts the mock service,
+checks parameter bounds/change/configuration/phase/determinism/override
+behavior, captures all five messages with a real local UDP receiver, performs
+two successive Swift-to-service generations, decodes both results with AppKit,
+and verifies a service connection failure is recoverable. When `sclang` is
+installed, it also receives all five Swift-side OSC paths and asserts the five
+normalized `/ctrl` messages forwarded to Tidal's port. Run that focused check
+directly with:
 
 ```sh
 /Applications/SuperCollider.app/Contents/MacOS/sclang -D tidal/VerifyWorldStateBridge.scd
@@ -186,9 +186,9 @@ controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 ## Known limitations
 
 - Artistic quality in mock mode is intentionally simple SVG, not ML output.
-- The real Diffusers path is a separate opt-in environment because its pinned
-  packages and model cache are several gigabytes; `scripts/verify.sh` stays a
-  fast dependency-free mock regression command.
+- The real Diffusers path is an opt-in `uv` extra because its pinned packages
+  and model cache are several gigabytes; `scripts/verify.sh` syncs only the
+  dependency-free mock environment.
 - SD-Turbo is selected for pipeline proof and speed, not maximum image quality.
   Its output is square and its prompt fidelity is below larger current models.
 - The selected model configuration has no safety checker. Keep the localhost
