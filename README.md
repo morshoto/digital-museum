@@ -19,8 +19,9 @@ music control over OSC.
 - Swift 5.9 or newer (`swift --version`).
 - Python 3.10 or newer; mock mode uses only the standard library.
 - Optional for music: SuperCollider, SuperDirt, TidalCycles, and suitable samples.
-- Optional for real images: PyTorch, Diffusers, Pillow, a local/downloaded
-  Img2Img-capable model, and enough memory for that model.
+- Optional for real images: the pinned environment in
+  `visual_service/requirements-diffusers.txt` and approximately 5 GB of free
+  runtime memory for the proven SD-Turbo/MPS path.
 
 ## Run the MVP
 
@@ -66,18 +67,25 @@ To anchor mock or real generations to an original painting:
 EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg swift run EvolvingImpressionist
 ```
 
-To use the optional real backend:
+To install and use the real backend:
 
 ```sh
+python3 -m venv .venv-diffusers
+.venv-diffusers/bin/python -m pip install --upgrade pip
+.venv-diffusers/bin/python -m pip install -r visual_service/requirements-diffusers.txt
+
+HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
-EVOLVING_MODEL_ID=/absolute/path/to/local-img2img-model \
-python3 visual_service/server.py
+.venv-diffusers/bin/python visual_service/server.py
 ```
 
-The backend blends the original with the previous frame according to
-`abstraction`, uses `abstraction`/`motion` for Img2Img strength, `brightness`
-for source illumination, and `tension` for guidance. Prompt language carries
-warmth, motion, and tension. Swift is coupled only to the HTTP contract.
+The proven default is `stabilityai/sd-turbo` at 512×512 on Apple Silicon MPS.
+The backend blends the original with the previous frame using a 30–55% original
+anchor, maps `abstraction`/`motion` to Img2Img strength, `brightness` to source
+exposure, `warmth` to color temperature, and `tension` to contrast/instability.
+Prompt language carries the same state. Swift remains coupled only to the HTTP
+contract. See [`visual_service/README.md`](visual_service/README.md) for the
+full setup, model override, mapping, and real verification commands.
 
 ## OSC, SuperCollider, and TidalCycles
 
@@ -105,7 +113,7 @@ Run all automated checks:
 ./scripts/verify.sh
 ```
 
-This runs six Python service tests, compiles every Swift target, starts the
+This runs the dependency-free Python service tests, compiles every Swift target, starts the
 mock service, checks parameter bounds/change/configuration/phase/determinism/
 override behavior, captures all five messages with a real local UDP receiver,
 performs two successive Swift-to-service generations, decodes both results
@@ -115,11 +123,20 @@ This machine currently has Apple Command Line Tools without Xcode's XCTest
 runtime, so the Swift checks use a repository-owned executable that exits
 nonzero on failure. The checks remain automated and require no GUI.
 
+The real SD-Turbo/MPS run, sequential identifiers, timings, memory footprint,
+controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
+[`visual_service/VERIFICATION.md`](visual_service/VERIFICATION.md).
+
 ## Known limitations
 
 - Artistic quality in mock mode is intentionally simple SVG, not ML output.
-- The Diffusers backend is implemented but requires a compatible local model
-  and was not exercised by the dependency-free verification suite.
+- The real Diffusers path is a separate opt-in environment because its pinned
+  packages and model cache are several gigabytes; `scripts/verify.sh` stays a
+  fast dependency-free mock regression command.
+- SD-Turbo is selected for pipeline proof and speed, not maximum image quality.
+  Its output is square and its prompt fidelity is below larger current models.
+- The selected model configuration has no safety checker. Keep the localhost
+  service private and review the model license before public deployment.
 - TidalCycles/SuperCollider startup and audio output remain a manual test.
 - Modulation edits are in-memory only.
 - No one-hour endurance run is part of the quick verification command.

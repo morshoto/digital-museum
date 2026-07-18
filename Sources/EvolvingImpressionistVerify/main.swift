@@ -119,26 +119,45 @@ struct VerificationRunner {
 
     private static func verifyVisualIntegration() async throws {
         guard let rawURL = ProcessInfo.processInfo.environment["VISUAL_SERVICE_URL"], let url = URL(string: rawURL) else {
-            throw VerificationFailure(description: "VISUAL_SERVICE_URL must point to the running mock service")
+            throw VerificationFailure(description: "VISUAL_SERVICE_URL must point to the running visual service")
         }
+        let environment = ProcessInfo.processInfo.environment
+        let expectedBackend = environment["EXPECTED_VISUAL_BACKEND"] ?? "mock"
+        let originalImagePath = environment["EVOLVING_ORIGINAL_IMAGE"]
         let client = VisualAPIClient(baseURL: url)
         let health = try await client.health()
-        try require(health.ok && health.backend == "mock", "mock health response was invalid")
+        try require(health.ok && health.backend == expectedBackend, "\(expectedBackend) health response was invalid")
         let first = try await client.generate(.init(
             state: .init(brightness: 0.3, warmth: 0.4, abstraction: 0.2, motion: 0.5, tension: 0.1),
-            reference: .init()
+            reference: .init(originalImagePath: originalImagePath)
         ))
         let second = try await client.generate(.init(
             state: .init(brightness: 0.8, warmth: 0.7, abstraction: 0.6, motion: 0.9, tension: 0.5),
-            reference: .init(previousGenerationID: first.generationID)
+            reference: .init(originalImagePath: originalImagePath, previousGenerationID: first.generationID)
         ))
         guard let firstData = first.imageData, let secondData = second.imageData else {
-            throw VerificationFailure(description: "mock response did not contain base64 image data")
+            throw VerificationFailure(description: "visual response did not contain base64 image data")
         }
         try require(NSImage(data: firstData) != nil && NSImage(data: secondData) != nil, "AppKit could not decode generated images")
         try require(firstData != secondData, "successive visual generations were identical")
+        if expectedBackend == "diffusers" {
+            try require(first.mediaType == "image/png" && second.mediaType == "image/png", "real backend did not return PNG media types")
+            try require(firstData.starts(with: [0x89, 0x50, 0x4e, 0x47]) && secondData.starts(with: [0x89, 0x50, 0x4e, 0x47]), "real backend responses were not PNG rasters")
+            do {
+                _ = try await client.generate(.init(
+                    state: WorldState(),
+                    reference: .init(originalImagePath: "/etc/hosts", previousGenerationID: second.generationID)
+                ))
+                throw VerificationFailure(description: "invalid raster reference unexpectedly succeeded")
+            } catch VisualAPIError.httpStatus(let status, _) {
+                try require(status == 400, "invalid raster reference returned HTTP \(status), expected 400")
+            }
+            let afterFailureHealth = try await client.health()
+            try require(afterFailureHealth.ok && afterFailureHealth.backend == "diffusers", "real backend crashed after a controlled generation failure")
+        }
 
         let unavailable = VisualAPIClient(baseURL: URL(string: "http://127.0.0.1:1")!)
+        let retainedFrame = secondData
         do {
             _ = try await unavailable.generate(.init(state: WorldState(), reference: .init()))
             throw VerificationFailure(description: "unavailable visual service unexpectedly succeeded")
@@ -147,6 +166,7 @@ struct VerificationRunner {
         } catch {
             // Expected: callers receive a recoverable error, not a process failure.
         }
-        print("PASS: two Swift → HTTP → mock image → AppKit decode cycles and failure handling")
+        try require(retainedFrame == secondData, "last valid visual was not retained after failure")
+        print("PASS: two Swift → HTTP → \(expectedBackend) image → AppKit decode cycles and retained-frame failure handling")
     }
 }
