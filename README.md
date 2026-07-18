@@ -11,7 +11,9 @@ music control over OSC.
 - `Sources/EvolvingImpressionistVerify`: framework-free Swift integration checks for Command Line Tools installations.
 - `visual_service`: dependency-free mock renderer plus an optional Diffusers Img2Img backend.
 - `tidal`: Tidal patterns and a SuperCollider OSC bridge.
-- `scripts/verify.sh`: complete automated verification entry point.
+- `scripts/start-installation.sh`: authoritative exhibition startup entry point.
+- `scripts/status-installation.sh` / `scripts/stop-installation.sh`: runtime health and cleanup.
+- `scripts/verify.sh`: complete automated regression entry point.
 
 ## Prerequisites
 
@@ -24,19 +26,35 @@ music control over OSC.
 - Optional for real images: the `diffusion` project extra and approximately
   5 GB of free runtime memory for the proven SD-Turbo/MPS path.
 
-## Run the MVP
+## Operator workflow
 
-Start the visual service in mock mode:
+Install the locked real-backend runtime and build both Swift configurations:
 
 ```sh
-uv sync --frozen
-EVOLVING_BACKEND=mock uv run --frozen python visual_service/server.py
+./scripts/install-runtime.sh
 ```
 
-Then launch the macOS application:
+Then use this single authoritative startup command from a stopped state:
 
 ```sh
-swift run EvolvingImpressionist
+./scripts/start-installation.sh
+```
+
+Startup fails closed if a required prerequisite, configured port, exact visual
+backend, SuperDirt startup marker, Tidal pattern load, or Swift process is
+unavailable. Exhibition startup defaults to the real `diffusers` backend and
+never falls back to mock. Mock is permitted only with both explicit settings:
+
+```sh
+EVOLVING_BACKEND=mock EVOLVING_ALLOW_MOCK_EXHIBITION=1 \
+EVOLVING_REQUIRE_MUSIC=0 ./scripts/start-installation.sh
+```
+
+Inspect and stop the tracked runtime with:
+
+```sh
+./scripts/status-installation.sh
+./scripts/stop-installation.sh
 ```
 
 The application enters a borderless, display-filling exhibition presentation
@@ -246,6 +264,8 @@ and low-frequency components do not realign with them during that window.
 The real SD-Turbo/MPS run, sequential identifiers, timings, memory footprint,
 controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 [`visual_service/VERIFICATION.md`](visual_service/VERIFICATION.md).
+The Phase B cold-start, cleanup, real-service, and outage-recovery evidence is
+recorded in [`OPERATOR_VERIFICATION.md`](OPERATOR_VERIFICATION.md).
 
 ## Known limitations
 
@@ -266,11 +286,12 @@ controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 
 ## Exhibition operator setup
 
-Connect the Mac to AC power. Disable system sleep, display sleep, and the screen
-saver for the operator account, or keep the launch command under
-`caffeinate -dimsu`; the application intentionally does not make persistent
-power-management changes. Verify those settings again after OS updates and
-before every exhibition session.
+Connect the Mac to AC power. The launcher defaults to `caffeinate -dimsu` for
+the lifetime of the Swift application, preventing idle system and display sleep
+without changing permanent system settings. Keep
+`EVOLVING_PREVENT_SLEEP=1` for exhibitions. Confirm the screen saver, power
+source, physical display, speaker selection, volume, and perceived audio in the
+room before admitting visitors.
 
 The initial SwiftUI window opens on the current primary display and the
 exhibition presentation fills that window's screen. Confirm the intended
@@ -280,14 +301,59 @@ rearranging displays during a run requires an operator check and may require an
 app relaunch. Menu bar and Dock are set to auto-hide only while exhibition
 fullscreen is active.
 
-Start the mock visual service first, then launch the release application. Use
-`Cmd-F` to leave or restore the borderless exhibition presentation. Use `Cmd-D`
+Run `./scripts/start-installation.sh`. Use `Cmd-F` to leave or restore the
+borderless exhibition presentation. Use `Cmd-D`
 to inspect the five live values, overrides, modulation controls, and transport/
 generation counters, then press it again so no developer controls remain on
 the artwork.
 
-This SwiftPM MVP has no launch agent, watchdog, signed application bundle, or
-crash relaunch policy. An operator or separately managed supervisor must start
-the service and application after login/reboot and restart either process after
-an unexpected exit. Test that external supervision on the actual installation
-Mac rather than assuming the development shell remains available.
+The launcher tracks only processes it starts and removes them if any startup
+stage fails. It does not install a launch agent, make permanent power changes,
+sign an application bundle, or relaunch a component after a crash. Run the
+status command during operator rounds and restart the complete installation if
+it reports failure.
+
+### Operator configuration
+
+All operator configuration uses environment variables; there is no competing
+config file. Export stable site values in the operator shell or launch wrapper.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `EVOLVING_BACKEND` | `diffusers` in launcher | Exact required backend (`diffusers` or explicitly allowed `mock`). |
+| `EVOLVING_ALLOW_MOCK_EXHIBITION` | `0` | Must be `1` to acknowledge a mock exhibition run. |
+| `EVOLVING_MODEL_ID` | `stabilityai/sd-turbo` | Hugging Face ID or readable local model path. |
+| `EVOLVING_VISUAL_HOST` / `EVOLVING_VISUAL_PORT` | `127.0.0.1` / `8000` | Visual service listener. |
+| `EVOLVING_VISUAL_URL` | derived from host/port | URL passed to Swift and used for health checks. |
+| `EVOLVING_ORIGINAL_IMAGE` | unset | Optional readable original painting path. |
+| `EVOLVING_IMAGE_WIDTH` / `EVOLVING_IMAGE_HEIGHT` | `512` / `512` | Diffusers output dimensions; multiples of eight. |
+| `EVOLVING_ATTENTION_SLICING` | `0` | Set `1` to lower peak model memory at a speed cost. |
+| `EVOLVING_OSC_HOST` / `EVOLVING_OSC_PORT` | `127.0.0.1` / `57120` | Swift WorldState destination and sclang language port. |
+| `EVOLVING_TIDAL_CONTROL_PORT` | `6010` | Bridge destination for Tidal `/ctrl` messages. |
+| `EVOLVING_DIRT_PORT` | `57120` | Tidal `/dirt/play` destination used by SuperDirt. |
+| `EVOLVING_REQUIRE_MUSIC` | `1` | Fail closed unless the complete music runtime starts. |
+| `EVOLVING_GENERATION_INTERVAL` | `45` | Seconds between Swift generation attempts (minimum 1). |
+| `EVOLVING_PREVENT_SLEEP` | `1` | Run the app under non-persistent `caffeinate -dimsu`. |
+| `EVOLVING_STARTUP_TIMEOUT` | `180` | Seconds allowed for real model and SuperDirt startup. |
+| `EVOLVING_INITIAL_GENERATION_TIMEOUT` | `180` | Seconds allowed for Swift to complete its first generation. |
+| `EVOLVING_RUNTIME_DIR` | `/tmp/evolving-impressionist-$UID` | PID/state/FIFO directory. |
+| `EVOLVING_LOG_DIR` | runtime directory `logs` | Persistent-for-session component logs. |
+| `EVOLVING_DIAGNOSTICS` | forced to `1` by launcher | Generation and OSC counters used by status/endurance. |
+| `HF_HUB_OFFLINE` / `HF_HUB_DISABLE_XET` | upstream defaults | Hugging Face cache/network behavior. |
+
+`status-installation.sh` distinguishes HTTP/backend health, Swift process and
+generation/OSC counters, SuperDirt's completed startup marker, Tidal's loaded
+patterns, and observed bridge forwarding. It deliberately does not call audio
+healthy based on a PID: speaker audibility remains the final manual operator
+check.
+
+### Startup architecture
+
+The launcher performs preflight, starts the selected visual service, requires
+`/health` to name that exact backend, boots SuperCollider and SuperDirt, loads
+the environment-configured WorldState bridge, starts a persistent pinned Tidal
+GHCi session and evaluates both existing patterns, launches the release Swift
+application under `caffeinate`, and runs the status check. Tidal remains an
+interactive environment, but its initial `d1`/`d2` evaluation is automated;
+operators may attach a separate development session only when intentionally
+editing a live performance. Shutdown proceeds in reverse dependency order.
