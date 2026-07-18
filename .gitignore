@@ -1,1 +1,4 @@
 PLAN.md
+.build/
+__pycache__/
+*.pyc
