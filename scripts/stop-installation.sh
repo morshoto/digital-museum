@@ -19,7 +19,8 @@ fi
 stop_pid "${tidal_pid:-}" "TidalCycles"
 stop_pid "${tidal_keepalive_pid:-}" "Tidal FIFO keepalive"
 stop_pid "${supercollider_pid:-}" "SuperCollider"
+stop_pid "${scsynth_pid:-}" "scsynth audio server"
 stop_pid "${visual_pid:-}" "visual service"
 
-rm -f "$runtime_dir/tidal-input.fifo" "$state_file"
+rm -f "$runtime_dir/tidal-input.fifo" "$audio_heartbeat_file" "$state_file"
 [ "$quiet" -eq 1 ] || say "Installation stopped cleanly. Logs retained at $runtime_log_dir"

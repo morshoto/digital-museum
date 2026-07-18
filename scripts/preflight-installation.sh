@@ -22,11 +22,11 @@ case "$prevent_sleep" in 0|1) ;; *) required_fail "EVOLVING_PREVENT_SLEEP must b
 for setting in "$visual_port" "$osc_port" "$tidal_control_port" "$dirt_port"; do
     case "$setting" in ''|*[!0-9]*) required_fail "all port settings must be integers"; break ;; esac
 done
-if python3 -c 'import sys; generation, startup, initial = map(float, sys.argv[1:]); assert generation >= 1 and startup >= 1 and initial >= 1' \
-    "$generation_interval" "$startup_timeout" "$initial_generation_timeout" 2>/dev/null; then
+if python3 -c 'import sys; values = map(float, sys.argv[1:]); assert all(value >= 1 for value in values)' \
+    "$generation_interval" "$startup_timeout" "$initial_generation_timeout" "$audio_heartbeat_max_age" 2>/dev/null; then
     required_ok "positive generation and startup timing configuration"
 else
-    required_fail "EVOLVING_GENERATION_INTERVAL and startup timeouts must be numeric and at least 1"
+    required_fail "generation, startup, and audio heartbeat timing values must be numeric and at least 1"
 fi
 
 if [ "$backend" = mock ] && [ "${EVOLVING_ALLOW_MOCK_EXHIBITION:-0}" != 1 ]; then
@@ -55,7 +55,11 @@ fi
 
 if [ "$backend" = diffusers ]; then
     if [ -e "$model_id" ]; then
-        required_ok "model path $model_id"
+        if [ -d "$model_id" ] && [ -r "$model_id/model_index.json" ]; then
+            required_ok "local Diffusers model path $model_id"
+        else
+            required_fail "local model path must be a directory containing readable model_index.json: $model_id"
+        fi
     else
         cache_name=$(printf '%s' "$model_id" | sed 's|/|--|g')
         cache_root=${HF_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/huggingface}/hub/models--$cache_name

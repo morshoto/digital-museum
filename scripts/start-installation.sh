@@ -20,27 +20,28 @@ app_log=$runtime_log_dir/application.log
 : >"$supercollider_log"
 : >"$tidal_log"
 : >"$app_log"
+rm -f "$audio_heartbeat_file"
 
 visual_pid=
 supercollider_pid=
+scsynth_pid=
 tidal_pid=
 tidal_keepalive_pid=
 app_pid=
 
 write_state() {
-    umask 077
-    {
-        printf 'visual_pid=%s\n' "$visual_pid"
-        printf 'supercollider_pid=%s\n' "$supercollider_pid"
-        printf 'tidal_pid=%s\n' "$tidal_pid"
-        printf 'tidal_keepalive_pid=%s\n' "$tidal_keepalive_pid"
-        printf 'app_pid=%s\n' "$app_pid"
-        printf 'runtime_backend=%s\n' "$backend"
-        printf 'runtime_visual_url=%s\n' "$visual_url"
-        printf 'runtime_require_music=%s\n' "$require_music"
-        printf 'runtime_log_dir=%s\n' "$runtime_log_dir"
-        printf 'runtime_started_at=%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')"
-    } >"$state_file"
+    python3 "$repo_dir/scripts/runtime-state.py" write "$state_file" \
+        --visual-pid "$visual_pid" \
+        --supercollider-pid "$supercollider_pid" \
+        --scsynth-pid "$scsynth_pid" \
+        --tidal-pid "$tidal_pid" \
+        --tidal-keepalive-pid "$tidal_keepalive_pid" \
+        --app-pid "$app_pid" \
+        --runtime-backend "$backend" \
+        --runtime-visual-url "$visual_url" \
+        --runtime-require-music "$require_music" \
+        --runtime-log-dir "$runtime_log_dir" \
+        --runtime-started-at "$(date '+%Y-%m-%dT%H:%M:%S%z')"
 }
 
 cleanup_failed_start() {
@@ -48,6 +49,9 @@ cleanup_failed_start() {
     trap - EXIT INT TERM
     if [ "$result" -ne 0 ]; then
         say "Startup failed; stopping every process started by this launcher." >&2
+        if [ -z "$scsynth_pid" ] && [ -n "$supercollider_pid" ]; then
+            scsynth_pid=$(pgrep -P "$supercollider_pid" -x scsynth | head -n 1 || true)
+        fi
         write_state
         "$repo_dir/scripts/stop-installation.sh" --quiet || true
         say "Logs: $runtime_log_dir" >&2
@@ -80,6 +84,7 @@ if [ "$require_music" = 1 ]; then
     say "[4/8] Starting SuperCollider, SuperDirt, and WorldState bridge"
     sc=$(sclang_path)
     EVOLVING_TIDAL_CONTROL_PORT="$tidal_control_port" EVOLVING_DIRT_PORT="$dirt_port" \
+        EVOLVING_AUDIO_HEARTBEAT_FILE="$audio_heartbeat_file" \
         "$sc" -D -u "$osc_port" "$repo_dir/tidal/InstallationStartup.scd" >>"$supercollider_log" 2>&1 &
     supercollider_pid=$!
     write_state
@@ -87,6 +92,11 @@ if [ "$require_music" = 1 ]; then
         tail -n 60 "$supercollider_log" >&2 || true
         fail "SuperCollider/SuperDirt did not report readiness"
     fi
+    scsynth_pid=$(pgrep -P "$supercollider_pid" -x scsynth | head -n 1 || true)
+    if ! is_pid_running "$scsynth_pid"; then
+        fail "SuperDirt reported readiness but its scsynth audio server is unavailable"
+    fi
+    write_state
 
     say "[5/8] Starting TidalCycles and loading the installation patterns"
     tidal_fifo=$runtime_dir/tidal-input.fifo

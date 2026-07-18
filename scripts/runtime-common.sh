@@ -21,8 +21,10 @@ prevent_sleep=${EVOLVING_PREVENT_SLEEP:-1}
 startup_timeout=${EVOLVING_STARTUP_TIMEOUT:-180}
 initial_generation_timeout=${EVOLVING_INITIAL_GENERATION_TIMEOUT:-180}
 generation_interval=${EVOLVING_GENERATION_INTERVAL:-45}
+audio_heartbeat_max_age=${EVOLVING_AUDIO_HEARTBEAT_MAX_AGE:-10}
 runtime_log_dir=${EVOLVING_LOG_DIR:-$runtime_dir/logs}
-state_file=$runtime_dir/runtime.env
+state_file=$runtime_dir/runtime.json
+audio_heartbeat_file=$runtime_dir/dirt-activity.txt
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -92,9 +94,23 @@ wait_for_generation() {
 
 load_state() {
     [ -f "$state_file" ] || return 1
-    # runtime.env is written only by start-installation.sh with numeric PIDs
-    # and repository-owned paths.
-    . "$state_file"
+    state_reader=$repo_dir/scripts/runtime-state.py
+    visual_pid=$(python3 "$state_reader" get "$state_file" visual_pid) || return 1
+    supercollider_pid=$(python3 "$state_reader" get "$state_file" supercollider_pid) || return 1
+    scsynth_pid=$(python3 "$state_reader" get "$state_file" scsynth_pid) || return 1
+    tidal_pid=$(python3 "$state_reader" get "$state_file" tidal_pid) || return 1
+    tidal_keepalive_pid=$(python3 "$state_reader" get "$state_file" tidal_keepalive_pid) || return 1
+    app_pid=$(python3 "$state_reader" get "$state_file" app_pid) || return 1
+    runtime_backend=$(python3 "$state_reader" get "$state_file" runtime_backend) || return 1
+    runtime_visual_url=$(python3 "$state_reader" get "$state_file" runtime_visual_url) || return 1
+    runtime_require_music=$(python3 "$state_reader" get "$state_file" runtime_require_music) || return 1
+    runtime_log_dir=$(python3 "$state_reader" get "$state_file" runtime_log_dir) || return 1
+    runtime_started_at=$(python3 "$state_reader" get "$state_file" runtime_started_at) || return 1
+
+    for pid in "$visual_pid" "$supercollider_pid" "$scsynth_pid" "$tidal_pid" "$tidal_keepalive_pid" "$app_pid"; do
+        case "$pid" in ''|*[!0-9]*) [ -z "$pid" ] || return 1 ;; esac
+    done
+    case "$runtime_require_music" in 0|1) ;; *) return 1 ;; esac
 }
 
 stop_pid() {

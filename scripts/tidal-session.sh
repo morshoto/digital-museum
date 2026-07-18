@@ -28,6 +28,13 @@ if [ "$control_port" != 6010 ] || [ "$dirt_port" != 57120 ]; then
         }
         { print }
     ' "$boot_tidal" >"$generated_boot"
+    replacement_count=$(grep -c '^tidalInst <- mkTidalWith' "$generated_boot" || true)
+    if [ "$replacement_count" -ne 1 ] || \
+        ! grep -F "oPort = $dirt_port" "$generated_boot" >/dev/null || \
+        ! grep -F "cCtrlPort = $control_port" "$generated_boot" >/dev/null; then
+        printf '%s\n' 'Failed to apply configured ports to the pinned BootTidal.hs; refusing silent defaults' >&2
+        exit 1
+    fi
     boot_tidal=$generated_boot
 fi
 
