@@ -18,7 +18,7 @@ From the repository root:
 
 ```sh
 uv sync --frozen
-EVOLVING_BACKEND=mock uv run --frozen python visual_service/server.py
+EVOLVING_BACKEND=mock uv run --frozen python backend/server.py
 ```
 
 ## Reproducible Diffusers installation
@@ -37,7 +37,7 @@ Start the real backend:
 ```sh
 HF_HUB_DISABLE_XET=1 \
 EVOLVING_BACKEND=diffusers \
-uv run --frozen --extra diffusion python visual_service/server.py
+uv run --frozen --extra diffusion python backend/server.py
 ```
 
 The first launch downloads the fp16 SDXL Turbo components (approximately 7 GB).
@@ -48,7 +48,7 @@ default only when intentionally testing another Img2Img-compatible checkpoint:
 ```sh
 EVOLVING_MODEL_ID=/absolute/path/or/hugging-face-id \
 EVOLVING_BACKEND=diffusers \
-uv run --frozen --extra diffusion python visual_service/server.py
+uv run --frozen --extra diffusion python backend/server.py
 ```
 
 `EVOLVING_IMAGE_WIDTH` and `EVOLVING_IMAGE_HEIGHT` default to 1024 and 576 and
@@ -57,16 +57,21 @@ never stretched. The default exactly matches a 16:9 installation display;
 override both dimensions for another display ratio. `EVOLVING_ATTENTION_SLICING=1`
 trades speed for lower peak memory pressure on smaller Macs.
 
-Pass an original painting path to Swift:
+Swift selects the bundled Monet *Water Lilies* reference automatically and
+passes its SwiftPM resource-bundle filesystem path to this service:
 
 ```sh
-EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg \
 swift run EvolvingImpressionist
 ```
 
-The path is read by the local Python service. The Swift request also carries
-the prior `generationID`, allowing the service to combine the original and
-previous generated raster on later cycles.
+Set `EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.png` on the Swift
+process to explicitly override that selection. A configured path must resolve
+to a readable file; Swift surfaces a configuration error and does not silently
+fall back if it does not. The selected path is read by the local Python
+service. The Swift request also carries the prior `generationID`, allowing the
+service to combine the persistent original anchor and previous generated raster
+on later cycles. The Diffusers validation requiring one of those references is
+unchanged.
 
 Generated raster history is a thread-safe, bounded LRU containing at most 16
 frames. The normal chain only needs the latest predecessor; the additional
@@ -78,13 +83,13 @@ usage to grow over a long-running exhibition.
 The unchanged five-field request is converted into the deterministic shared
 artistic state documented in [`../docs/SHARED_ARTISTIC_STATE.md`](../docs/SHARED_ARTISTIC_STATE.md).
 
-| Artistic quality | Diffusion mapping |
-| --- | --- |
-| luminosity | Final exposure plus prompt illumination |
-| fluidity | Bounded Img2Img strength modifier, flowing gesture prompt, and mock stroke deformation |
-| instability | Bounded strength modifier, final contrast/sharpness, structural prompt, and non-Turbo CFG |
-| serenity | Additional original-image anchoring and composition-preservation prompt |
-| density | Non-Turbo step count, texture prompt, and mock stroke count |
+| Artistic quality | Diffusion mapping                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| luminosity       | Final exposure plus prompt illumination                                                   |
+| fluidity         | Bounded Img2Img strength modifier, flowing gesture prompt, and mock stroke deformation    |
+| instability      | Bounded strength modifier, final contrast/sharpness, structural prompt, and non-Turbo CFG |
+| serenity         | Additional original-image anchoring and composition-preservation prompt                   |
+| density          | Non-Turbo step count, texture prompt, and mock stroke count                               |
 
 Raw `warmth` retains red/blue source color-temperature scaling and palette
 language. The generation sequence still changes the deterministic seed so
@@ -141,8 +146,8 @@ know which model or drift-control algorithm consumed them.
 Run backend tests in the real environment:
 
 ```sh
-uv run --frozen --extra diffusion python -m py_compile visual_service/server.py visual_service/verify_real.py
-uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
+uv run --frozen --extra diffusion python -m py_compile backend/server.py backend/verify_real.py
+uv run --frozen --extra diffusion python -m unittest discover -s backend/tests -v
 ```
 
 With the real service running, exercise 20 sequential generations plus
@@ -152,20 +157,22 @@ contact sheet, send an invalid raster reference, and confirm the service remains
 healthy:
 
 ```sh
-uv run --frozen --extra diffusion python visual_service/verify_real.py \
+uv run --frozen --extra diffusion python backend/verify_real.py \
   --original /absolute/path/to/painting.jpg
 ```
 
 Verify the same real responses through Swift and AppKit:
 
 ```sh
-VISUAL_SERVICE_URL=http://127.0.0.1:8000 \
+backend_URL=http://127.0.0.1:8000 \
 EXPECTED_VISUAL_BACKEND=diffusers \
-EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.jpg \
 swift run EvolvingImpressionistVerify
 ```
 
 The service converts invalid references into controlled JSON errors. Swift's
+HTTP diagnostics retain both the concrete server error and a bounded copy of
+the response body; rejected-generation logs never include request/image
+payloads. Swift's
 `VisualService` changes `currentImage` and `previousGenerationID` only after a
 response has decoded successfully, so an HTTP/model/decode failure preserves
 the last valid frame. Selecting `EVOLVING_BACKEND=mock` remains the explicit,

@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from visual_service.server import artistic_state  # noqa: E402
+from backend.server import artistic_state  # noqa: E402
 
 
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")

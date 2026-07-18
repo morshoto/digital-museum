@@ -9,16 +9,20 @@ let package = Package(
         .library(name: "EvolvingImpressionistCore", targets: ["EvolvingImpressionistCore"])
     ],
     targets: [
-        .target(name: "EvolvingImpressionistCore", path: "Sources/EvolvingImpressionistCore"),
+        .target(
+            name: "EvolvingImpressionistCore",
+            path: "application/EvolvingImpressionistCore",
+            resources: [.copy("Resources/Paintings")]
+        ),
         .executableTarget(
             name: "EvolvingImpressionist",
             dependencies: ["EvolvingImpressionistCore"],
-            path: "Sources/EvolvingImpressionist"
+            path: "application/EvolvingImpressionist"
         ),
         .executableTarget(
             name: "EvolvingImpressionistVerify",
             dependencies: ["EvolvingImpressionistCore"],
-            path: "Sources/EvolvingImpressionistVerify"
+            path: "application/EvolvingImpressionistVerify"
         )
     ]
 )

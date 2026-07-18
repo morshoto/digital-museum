@@ -66,10 +66,10 @@ say "[1/8] Preflight"
 say "[2/8] Starting visual service ($backend)"
 if [ "$backend" = diffusers ]; then
     EVOLVING_BACKEND="$backend" EVOLVING_MODEL_ID="$model_id" EVOLVING_VISUAL_PORT="$visual_port" \
-        uv run --frozen --extra diffusion python -u "$repo_dir/visual_service/server.py" >>"$visual_log" 2>&1 &
+        uv run --frozen --extra diffusion python -u "$repo_dir/backend/server.py" >>"$visual_log" 2>&1 &
 else
     EVOLVING_BACKEND="$backend" EVOLVING_VISUAL_PORT="$visual_port" \
-        uv run --frozen python -u "$repo_dir/visual_service/server.py" >>"$visual_log" 2>&1 &
+        uv run --frozen python -u "$repo_dir/backend/server.py" >>"$visual_log" 2>&1 &
 fi
 visual_pid=$!
 write_state

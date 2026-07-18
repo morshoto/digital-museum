@@ -4,7 +4,7 @@ Verified on 2026-07-18 on Apple Silicon macOS. The original Phase C live test
 used the then-current cached SD-Turbo/MPS backend, TidalCycles 1.10.1,
 SuperDirt 1.7.3, SuperCollider 3.14.1, and the Mac mini speaker output selected
 at 48 kHz. Current visual-coherence defaults and their separate real-backend
-evidence are recorded in [`../visual_service/VERIFICATION.md`](../visual_service/VERIFICATION.md).
+evidence are recorded in [`../backend/VERIFICATION.md`](../backend/VERIFICATION.md).
 
 ## Automated regression
 
@@ -25,11 +25,11 @@ that all five derived qualities connect to their intended pattern controls.
 The real visual backend rendered three sequential 512×512 PNG frames, retaining
 the original painting and previous generation references:
 
-| State | Visual observation | Live Tidal behavior represented in `/dirt/play` |
-| --- | --- | --- |
-| A calm/dark | Cool, subdued light; quiet water-lily structure remained clearest and darkest. | Low 2.52 kHz cutoff, sparse density, long 1.47 legato, small room/size, minimal detune/nudge/crush disturbance. |
+| State            | Visual observation                                                                                                     | Live Tidal behavior represented in `/dirt/play`                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| A calm/dark      | Cool, subdued light; quiet water-lily structure remained clearest and darkest.                                         | Low 2.52 kHz cutoff, sparse density, long 1.47 legato, small room/size, minimal detune/nudge/crush disturbance.  |
 | B luminous/fluid | Clearly brightest and warmest frame; soft open light and flowing surface variation while composition remained legible. | Open 10.43 kHz cutoff, medium-high density and room, connected 1.22 legato, low instability, warm voice balance. |
-| C tense/abstract | Strongest deformation and contrast; water and horizon became broad turbulent structures with denser marks. | Dense event flow, large room, short 0.74 legato, strong motif mutation, detune/nudge, and crush disturbance. |
+| C tense/abstract | Strongest deformation and contrast; water and horizon became broad turbulent structures with denser marks.             | Dense event flow, large room, short 0.74 legato, strong motif mutation, detune/nudge, and crush disturbance.     |
 
 The descriptions of music are based on real Tidal-generated event controls and
 recorded output, not an agent claim of subjective hearing. An exhibition
@@ -74,7 +74,7 @@ ffmpeg -hide_banner -nostats -i /tmp/evolving-phase-c.wav \
 
 uv sync --frozen --extra diffusion
 HF_HUB_OFFLINE=1 EVOLVING_BACKEND=diffusers EVOLVING_VISUAL_PORT=8892 \
-  uv run --frozen --extra diffusion python visual_service/server.py
+  uv run --frozen --extra diffusion python backend/server.py
 
 python3 scripts/verify-artistic-states.py \
   --port 57201 --hold-seconds 0.01 --transition-seconds 0.01 \

@@ -1,0 +1,86 @@
+name: Application issue
+description: Report a bug, request, or question about the macOS application.
+title: "[Application]: "
+body:
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue type
+      options:
+        - Bug
+        - Enhancement
+        - Question
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem or requested change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: For bugs, list the smallest sequence that reproduces the problem.
+      placeholder: |
+        1. Start the installation with ...
+        2. Open ...
+        3. Observe ...
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include screenshots or recordings when useful.
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 15.5
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Mac model and chip
+      placeholder: e.g. Mac Studio, Apple M2 Max
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: Application revision
+      description: Provide the release version or Git commit when known.
+      placeholder: e.g. v0.1.0 or 0123abcd
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste relevant output after removing secrets and private file paths.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true
+        - label: I removed secrets and private information from this report.
+          required: true

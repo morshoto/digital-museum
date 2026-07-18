@@ -5,13 +5,17 @@
 # variables rather than a second configuration format.
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+. "$repo_dir/scripts/load-env.sh"
+
 runtime_user_id=$(id -u)
 runtime_dir=${EVOLVING_RUNTIME_DIR:-/tmp/evolving-impressionist-$runtime_user_id}
 visual_host=${EVOLVING_VISUAL_HOST:-127.0.0.1}
 visual_port=${EVOLVING_VISUAL_PORT:-8000}
 visual_url=${EVOLVING_VISUAL_URL:-http://$visual_host:$visual_port}
 backend=${EVOLVING_BACKEND:-diffusers}
-model_id=${EVOLVING_MODEL_ID:-stabilityai/sd-turbo}
+model_id=${EVOLVING_MODEL_ID:-stabilityai/sdxl-turbo}
 osc_host=${EVOLVING_OSC_HOST:-127.0.0.1}
 osc_port=${EVOLVING_OSC_PORT:-57120}
 tidal_control_port=${EVOLVING_TIDAL_CONTROL_PORT:-6010}
@@ -27,7 +31,6 @@ state_file=$runtime_dir/runtime.json
 audio_heartbeat_file=$runtime_dir/dirt-activity.txt
 
 say() { printf '%s\n' "$*"; }
-fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 command_path() { command -v "$1" 2>/dev/null || true; }
 
 sclang_path() {

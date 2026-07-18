@@ -1,0 +1,125 @@
+# Contributing
+
+
+## Prerequisites
+
+
+- Node.js 20+
+- pnpm
+- PostgreSQL (for integration tests)
+- An OpenAI API key or compatible gateway
+
+
+## Dev Workflow
+
+
+```bash
+cd backend
+cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, OPENAI_API
+pnpm install
+pnpm prisma migrate dev
+pnpm run dev           # hot reload at http://localhost:3000
+```
+
+
+## Validation Commands
+
+
+Run these before opening a PR:
+
+
+```bash
+pnpm run check         # lint + format check (Biome) — must pass
+pnpm run build         # TypeScript compilation — must pass
+pnpm run test          # all test suites — must pass
+```
+
+
+During development, auto-fix formatting and safe lint issues with:
+
+
+```bash
+pnpm run check:fix
+```
+
+
+For coverage reporting:
+
+
+```bash
+pnpm run test:coverage
+```
+
+
+## Git Hooks (pre-push)
+
+
+A shared `pre-push` hook runs the same checks CI does — `pnpm run check`, `pnpm run test`, and `pnpm run build` — so a broken branch never reaches a PR.
+
+
+The hook lives in `.githooks/` (committed) and is activated by pointing git at it. Running `pnpm install` in `backend/` does this automatically (via the `prepare` script). If you skipped that, enable it manually from the repo root:
+
+
+```bash
+git config core.hooksPath .githooks
+```
+
+
+To push without running the checks (e.g. an intentional WIP branch):
+
+
+```bash
+git push --no-verify
+```
+
+
+## Testing Conventions
+
+
+- Unit tests live alongside source files (`*.test.ts` next to the file under test).
+- Integration tests go in `tests/integration/`, e2e tests in `tests/e2e/`.
+- Use `vi.mock` to mock external dependencies (OpenAI client, Prisma client). Do not make real network calls in unit tests.
+- Use `vitest run` for CI; `vitest` (watch mode) during development.
+
+
+## Linting and Formatting
+
+
+The project uses [Biome](https://biomejs.dev/) for linting, formatting, and import sorting — configured in `backend/biome.json`. `pnpm run check` is the single command that checks everything. See [`backend/docs/linting.md`](./backend/docs/linting.md) for rule details and override rationale.
+
+
+## Adding or Changing Prompts
+
+
+Prompt files live in `backend/data/prompt/*.md` and are loaded once at startup via `getPrompt(fileName)` in `src/config/prompt.ts`. Changes take effect on the next server restart (or `pnpm run dev` reload). `chat.md` exists but is not currently wired to any agent — add a new sub-agent and register it in `agent.supervisor.ts` to use it.
+
+
+## Architecture Decisions
+
+
+Significant design choices are recorded as ADRs in `docs/adr/`. If your change introduces or reverses a meaningful architectural decision, add or update the relevant ADR. Use `docs/adr/0000-template.md` as the starting point and follow the numbering sequence.
+
+
+## Commit Messages
+
+
+Use the imperative mood and a short summary line, for example:
+
+
+```
+add policy validator sub-agent for offer review
+fix: normalise OpenAI schema type casing
+docs: document supervisor routing pattern
+```
+
+
+Prefix with `fix:`, `feat:`, `docs:`, `test:`, `chore:`, or `refactor:` where it makes the intent clear.
+
+
+## Reporting Issues
+
+
+Open a GitHub Issue and fill in the provided template. For bugs, include the request payload, the response, and relevant log lines from `pnpm run dev`.
+
+
+

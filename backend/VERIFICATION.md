@@ -70,7 +70,7 @@ high-abstraction anchors below are the rerun after correcting that failure.
 Command:
 
 ```sh
-uv run --frozen --extra diffusion python visual_service/verify_real.py \
+uv run --frozen --extra diffusion python backend/verify_real.py \
   --url http://127.0.0.1:8893 \
   --original /tmp/evolving-diffusion-smoke/original.jpg \
   --output-dir /tmp/evolving-sdxl-temporal-final
@@ -82,12 +82,12 @@ The service remained healthy after 26 total real outputs (20 temporal plus six
 controlled variants) and a deliberately invalid raster request.
 
 | Checkpoint | Generation ID | PNG bytes | Duration | Original MAE | Original edge correlation |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 0 | original | — | — | 0 | 1.0 |
-| 1 | `ea00d6dc…` | 893,068 | 2.169 s | 22.203 | 0.6181 |
-| 5 | `68979fb0…` | 845,165 | 1.939 s | 22.854 | 0.6090 |
-| 10 | `18698d51…` | 851,898 | 1.926 s | 23.101 | 0.6445 |
-| 20 | `5045fe27…` | 847,110 | 1.930 s | 23.062 | 0.6242 |
+| ---------- | ------------- | --------: | -------: | -----------: | ------------------------: |
+| 0          | original      |         — |        — |            0 |                       1.0 |
+| 1          | `ea00d6dc…`   |   893,068 |  2.169 s |       22.203 |                    0.6181 |
+| 5          | `68979fb0…`   |   845,165 |  1.939 s |       22.854 |                    0.6090 |
+| 10         | `18698d51…`   |   851,898 |  1.926 s |       23.101 |                    0.6445 |
+| 20         | `5045fe27…`   |   847,110 |  1.930 s |       23.062 |                    0.6242 |
 
 - Average temporal generation time: 1.943 s
 - Median: 1.926 s
@@ -110,11 +110,11 @@ evicted does not interrupt forward evolution.
 The verifier generated each controlled sample directly from the same original
 with the other four values held at the default above.
 
-| Check | Automated result | Manual result |
-| --- | --- | --- |
-| Abstraction 0.05 vs 0.90 | Original MAE 21.673 vs 23.343 | Low retained finer source layout; high used broader, freer paint while retaining pond, lilies, reflections, and hanging willow structure. |
-| Brightness 0.05 vs 0.95 | Mean luminance 118.002 vs 164.507 | Clearly darker vs luminous without a composition change. |
-| Warmth 0.05 vs 0.95 | Mean red-minus-blue −75.285 vs −16.859 | Clearly cool blue vs warm pink/gold atmosphere without a composition change. |
+| Check                    | Automated result                       | Manual result                                                                                                                             |
+| ------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Abstraction 0.05 vs 0.90 | Original MAE 21.673 vs 23.343          | Low retained finer source layout; high used broader, freer paint while retaining pond, lilies, reflections, and hanging willow structure. |
+| Brightness 0.05 vs 0.95  | Mean luminance 118.002 vs 164.507      | Clearly darker vs luminous without a composition change.                                                                                  |
+| Warmth 0.05 vs 0.95      | Mean red-minus-blue −75.285 vs −16.859 | Clearly cool blue vs warm pink/gold atmosphere without a composition change.                                                              |
 
 Motion changes the deterministic seed and contributes to fluidity and density.
 Tension contributes to instability and serenity. Fluidity and instability may
@@ -171,10 +171,10 @@ generation ID; recovery advanced exactly one transition.
 
 ```sh
 uv run --frozen --extra diffusion python -m py_compile \
-  visual_service/server.py visual_service/verify_real.py \
-  visual_service/tests/test_server.py visual_service/tests/test_diffusers_backend.py
+  backend/server.py backend/verify_real.py \
+  backend/tests/test_server.py backend/tests/test_diffusers_backend.py
 uv run --frozen --extra diffusion python -m unittest discover \
-  -s visual_service/tests -v
+  -s backend/tests -v
 ./scripts/verify.sh
 ```
 

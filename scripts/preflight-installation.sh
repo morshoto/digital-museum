@@ -46,7 +46,7 @@ if command -v uv >/dev/null 2>&1; then
         else
             required_fail "diffusion dependencies are unavailable; run ./scripts/install-runtime.sh"
         fi
-    elif uv run --frozen python -c 'import visual_service.server' >/dev/null 2>&1; then
+    elif uv run --frozen python -c 'import backend.server' >/dev/null 2>&1; then
         required_ok "locked Python mock environment"
     else
         required_fail "Python environment is unavailable; run ./scripts/install-runtime.sh"
@@ -134,10 +134,13 @@ fi
 
 if [ -n "${EVOLVING_ORIGINAL_IMAGE:-}" ]; then
     if [ -r "$EVOLVING_ORIGINAL_IMAGE" ]; then required_ok "original image $EVOLVING_ORIGINAL_IMAGE"; else required_fail "EVOLVING_ORIGINAL_IMAGE is not readable"; fi
-elif [ "$backend" = diffusers ]; then
-    required_fail "EVOLVING_ORIGINAL_IMAGE is required for the diffusers Img2Img backend"
 else
-    optional_missing "EVOLVING_ORIGINAL_IMAGE is unset"
+    bundled_reference=$(find -H "$repo_dir/.build/release" -path '*/Paintings/monet-water-lilies.png' -type f -print -quit 2>/dev/null || true)
+    if [ -n "$bundled_reference" ] && [ -r "$bundled_reference" ]; then
+        required_ok "bundled default original image $bundled_reference"
+    else
+        required_fail "bundled Monet reference is missing from the Swift release resources; run ./scripts/install-runtime.sh"
+    fi
 fi
 
 say "PREFLIGHT SUMMARY: required_failures=$required_failures optional_unavailable=$optional_warnings backend=$backend music_required=$require_music"

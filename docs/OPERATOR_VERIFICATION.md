@@ -32,7 +32,7 @@ ports had no remaining listeners. Logs from the run were retained under
 EVOLVING_BACKEND=mock EVOLVING_REQUIRE_MUSIC=0 ./scripts/install-runtime.sh
 ./scripts/verify.sh
 uv sync --frozen --extra diffusion
-uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
+uv run --frozen --extra diffusion python -m unittest discover -s backend/tests -v
 ```
 
 The real cold start used the equivalent of:
@@ -63,9 +63,9 @@ The focused real-service verification used:
 
 ```sh
 EVOLVING_BACKEND=diffusers EVOLVING_VISUAL_PORT=8899 HF_HUB_OFFLINE=1 \
-uv run --frozen --extra diffusion python visual_service/server.py
+uv run --frozen --extra diffusion python backend/server.py
 
-uv run --frozen --extra diffusion python visual_service/verify_real.py \
+uv run --frozen --extra diffusion python backend/verify_real.py \
   --url http://127.0.0.1:8899 \
   --original /tmp/evolving-phase-b-smoke/original.jpg \
   --output-dir /tmp/evolving-phase-b-smoke/real-output

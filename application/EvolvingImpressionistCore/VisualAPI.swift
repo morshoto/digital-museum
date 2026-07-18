@@ -117,8 +117,19 @@ public final class VisualAPIClient: VisualAPIProviding, @unchecked Sendable {
     private static func validate(response: URLResponse, data: Data) throws {
         guard let http = response as? HTTPURLResponse else { throw VisualAPIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "unknown error"
-            throw VisualAPIError.httpStatus(http.statusCode, body)
+            // Error responses are expected to be small JSON documents. Bound
+            // retained text so a malformed service cannot flood diagnostics
+            // with an image-sized payload.
+            let bodyData = data.prefix(16_384)
+            let body = String(data: bodyData, encoding: .utf8) ?? "unreadable response body"
+            let suffix = data.count > bodyData.count ? "… (truncated)" : ""
+            let serverMessage = try? JSONDecoder().decode(ServerErrorResponse.self, from: bodyData).error
+            let detail = serverMessage.map { "\($0)\nResponse body: \(body)\(suffix)" } ?? "\(body)\(suffix)"
+            throw VisualAPIError.httpStatus(http.statusCode, detail)
         }
+    }
+
+    private struct ServerErrorResponse: Decodable {
+        let error: String
     }
 }

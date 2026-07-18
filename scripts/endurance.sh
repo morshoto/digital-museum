@@ -31,7 +31,7 @@ event() { printf '%s %s\n' "$(timestamp)" "$*" | tee -a "$events"; }
 
 start_service() {
     EVOLVING_BACKEND=mock EVOLVING_VISUAL_PORT="$service_port" EVOLVING_QUIET=1 \
-        uv run --frozen python -u "$repo_dir/visual_service/server.py" >>"$service_log" 2>&1 &
+        uv run --frozen python -u "$repo_dir/backend/server.py" >>"$service_log" 2>&1 &
     service_pid=$!
 }
 

@@ -2,7 +2,7 @@
 name = "evolving-impressionist-visual-service"
 version = "0.1.0"
 description = "Local visual generation service for Evolving Impressionist"
-readme = "visual_service/README.md"
+readme = "backend/README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = []
 
