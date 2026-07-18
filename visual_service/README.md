@@ -3,9 +3,14 @@
 The service keeps two interchangeable backends behind the same HTTP contract:
 
 - `mock` is the dependency-free SVG fallback and remains the default.
-- `diffusers` is real Img2Img generation. The proven Apple Silicon model is
-  [`stabilityai/sd-turbo`](https://huggingface.co/stabilityai/sd-turbo), using
-  PyTorch MPS at 512×512 and four inference steps.
+- `diffusers` is real Img2Img generation. The selected Apple Silicon model is
+  [`stabilityai/sdxl-turbo`](https://huggingface.co/stabilityai/sdxl-turbo),
+  using PyTorch MPS at 1024×576 and four inference steps.
+
+The prior SD-Turbo model card explicitly recommends the larger SDXL Turbo for
+increased quality and prompt understanding. SDXL Turbo retains the required
+1–4-step distilled inference and supports the same Diffusers Img2Img pipeline,
+making it the practical quality upgrade without changing the service contract.
 
 ## Mock backend
 
@@ -35,7 +40,7 @@ EVOLVING_BACKEND=diffusers \
 uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
-The first launch downloads approximately 2.6 GB of fp16 model components.
+The first launch downloads the fp16 SDXL Turbo components (approximately 7 GB).
 Later launches reuse the Hugging Face cache and can run offline; set
 `HF_HUB_OFFLINE=1` to force the cached snapshot path. Override the
 default only when intentionally testing another Img2Img-compatible checkpoint:
@@ -46,9 +51,11 @@ EVOLVING_BACKEND=diffusers \
 uv run --frozen --extra diffusion python visual_service/server.py
 ```
 
-`EVOLVING_IMAGE_WIDTH` and `EVOLVING_IMAGE_HEIGHT` default to 512 and must be
-multiples of eight. `EVOLVING_ATTENTION_SLICING=1` trades speed for lower peak
-memory pressure on smaller Macs.
+`EVOLVING_IMAGE_WIDTH` and `EVOLVING_IMAGE_HEIGHT` default to 1024 and 576 and
+must be multiples of eight. References are resized with a LANCZOS center crop,
+never stretched. The default exactly matches a 16:9 installation display;
+override both dimensions for another display ratio. `EVOLVING_ATTENTION_SLICING=1`
+trades speed for lower peak memory pressure on smaller Macs.
 
 Pass an original painting path to Swift:
 
@@ -70,22 +77,42 @@ usage to grow over a long-running exhibition.
 
 | State | Diffusion mapping |
 | --- | --- |
-| brightness | Source exposure plus prompt illumination |
-| warmth | Red/blue source color-temperature scaling plus palette prompt |
-| abstraction | Img2Img strength and reduced—but never removed—original anchor |
-| motion | Img2Img strength, changing deterministic seed, and brush-motion prompt |
-| tension | Source contrast, atmosphere prompt, and CFG for non-Turbo models |
+| brightness | Final exposure from 0.82× to 1.18× plus prompt illumination |
+| warmth | Final red/blue temperature separation (±11%) plus palette prompt |
+| abstraction | Img2Img strength, continuous original anchoring, and output pull-back |
+| motion | A bounded addition to Img2Img strength, changing deterministic seed, and brush-motion prompt |
+| tension | Final contrast/sharpness, atmosphere prompt, and CFG for non-Turbo models |
 
-For SD-Turbo, classifier-free guidance is correctly disabled. Four steps and a
-minimum strength of 0.25 satisfy the model's Img2Img requirement that
+For SDXL Turbo, classifier-free guidance is correctly disabled. Four steps and
+a minimum strength of 0.25 satisfy the model's Img2Img requirement that
 `steps × strength >= 1`.
 
 Each sequential source is a blend of the previous generated image and the
-original painting. The original weight ranges from 55% at low abstraction to
-30% at maximum abstraction, so iterative generations cannot silently lose the
-anchor. Brightness, temperature, and contrast adjustments are applied after
-the blend. A backend lock prevents concurrent access to the non-thread-safe
-MPS pipeline.
+original painting. Continuous original weight ranges from 72% at zero
+abstraction to 50% at maximum abstraction. Every fifth generation adds a 10%
+pull-back, and the generated result receives a second 16%→8% original blend
+before deterministic color finishing. Img2Img strength ranges from 0.25 to a
+hard ceiling of 0.49 and is driven primarily by abstraction with a smaller
+motion contribution. This keeps four-step Turbo inference below the abrupt
+two-effective-step scene-replacement boundary found during manual inspection.
+These controls stop repeated Img2Img from becoming an
+unanchored random walk while still allowing visible evolution. A backend lock
+prevents concurrent access to the non-thread-safe MPS pipeline.
+
+Drift behavior is configurable without changing the HTTP contract:
+
+```text
+EVOLVING_ORIGINAL_ANCHOR_LOW=0.72
+EVOLVING_ORIGINAL_ANCHOR_HIGH=0.50
+EVOLVING_OUTPUT_ANCHOR_LOW=0.16
+EVOLVING_OUTPUT_ANCHOR_HIGH=0.08
+EVOLVING_PULLBACK_INTERVAL=5
+EVOLVING_PULLBACK_BOOST=0.10
+```
+
+`LOW` and `HIGH` refer to abstraction, not numeric anchor magnitude. Set the
+interval to `0` to disable periodic pull-back. `/health` reports the effective
+model, dimensions, crop mode, and drift settings.
 
 ## API and verification
 
@@ -110,9 +137,11 @@ uv run --frozen --extra diffusion python -m py_compile visual_service/server.py 
 uv run --frozen --extra diffusion python -m unittest discover -s visual_service/tests -v
 ```
 
-With the real service running, exercise two sequential generations, assert the
-original/prior-frame reference chain, decode the returned PNGs with Pillow, send
-an invalid raster reference, and confirm the service remains healthy:
+With the real service running, exercise 20 sequential generations plus
+controlled abstraction/brightness/warmth variants, assert the original/prior
+frame chain, decode every PNG with Pillow, save the required checkpoints and a
+contact sheet, send an invalid raster reference, and confirm the service remains
+healthy:
 
 ```sh
 uv run --frozen --extra diffusion python visual_service/verify_real.py \
