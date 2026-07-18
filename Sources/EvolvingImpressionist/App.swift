@@ -22,12 +22,28 @@ struct EvolvingImpressionistApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private struct WindowedPresentation {
+        let frame: NSRect
+        let styleMask: NSWindow.StyleMask
+        let collectionBehavior: NSWindow.CollectionBehavior
+        let isMovable: Bool
+        let applicationOptions: NSApplication.PresentationOptions
+    }
+
     private var didEnterExhibition = false
+    private var isExhibitionFullscreen = false
+    private var windowedPresentation: WindowedPresentation?
     private var fullscreenRetry: DispatchWorkItem?
+    private var windowObservers: [NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NotificationCenter.default.addObserver(forName: .toggleFullscreen, object: nil, queue: .main) { _ in
-            Self.exhibitionWindow?.toggleFullScreen(nil)
+        windowObservers.append(NotificationCenter.default.addObserver(forName: .toggleFullscreen, object: nil, queue: .main) { [weak self] _ in
+            self?.toggleFullscreen()
+        })
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification] {
+            windowObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.enterExhibitionWhenWindowIsReady()
+            })
         }
         // Exhibition mode is the default: the first window fills the display
         // without requiring a visitor or operator to touch the keyboard.
@@ -36,22 +52,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         fullscreenRetry?.cancel()
+        windowObservers.forEach(NotificationCenter.default.removeObserver)
+        windowObservers.removeAll()
     }
 
-    private func enterExhibitionWhenWindowIsReady(attempt: Int = 0) {
+    private func enterExhibitionWhenWindowIsReady() {
         guard !didEnterExhibition else { return }
         guard let window = Self.exhibitionWindow else {
-            guard attempt < 100 else { return }
-            let retry = DispatchWorkItem { [weak self] in
-                self?.enterExhibitionWhenWindowIsReady(attempt: attempt + 1)
-            }
-            fullscreenRetry = retry
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: retry)
+            scheduleFullscreenRetry()
             return
         }
-        didEnterExhibition = true
         fullscreenRetry?.cancel()
-        if !window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+        fullscreenRetry = nil
+        enterFullscreen(window)
+        didEnterExhibition = true
+    }
+
+    private func toggleFullscreen() {
+        guard let window = Self.exhibitionWindow else {
+            didEnterExhibition = false
+            scheduleFullscreenRetry()
+            return
+        }
+        if isExhibitionFullscreen {
+            exitFullscreen(window)
+        } else {
+            enterFullscreen(window)
+        }
+    }
+
+    private func enterFullscreen(_ window: NSWindow) {
+        guard !isExhibitionFullscreen, let screen = window.screen ?? NSScreen.main else { return }
+        windowedPresentation = WindowedPresentation(
+            frame: window.frame,
+            styleMask: window.styleMask,
+            collectionBehavior: window.collectionBehavior,
+            isMovable: window.isMovable,
+            applicationOptions: NSApp.presentationOptions
+        )
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.collectionBehavior.remove(.fullScreenAuxiliary)
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.styleMask = [.borderless]
+        window.isMovable = false
+        NSApp.presentationOptions.formUnion([.autoHideDock, .autoHideMenuBar])
+        window.setFrame(screen.frame, display: true)
+        isExhibitionFullscreen = true
+        logDiagnostic("fullscreen_entered=1 width=\(Int(screen.frame.width)) height=\(Int(screen.frame.height))")
+    }
+
+    private func exitFullscreen(_ window: NSWindow) {
+        guard isExhibitionFullscreen, let presentation = windowedPresentation else { return }
+        NSApp.presentationOptions = presentation.applicationOptions
+        window.styleMask = presentation.styleMask
+        window.collectionBehavior = presentation.collectionBehavior
+        window.isMovable = presentation.isMovable
+        window.setFrame(presentation.frame, display: true)
+        window.makeKeyAndOrderFront(nil)
+        isExhibitionFullscreen = false
+        windowedPresentation = nil
+        logDiagnostic("fullscreen_entered=0")
+    }
+
+    private func scheduleFullscreenRetry() {
+        guard !didEnterExhibition else { return }
+        if let fullscreenRetry, !fullscreenRetry.isCancelled { return }
+        let retry = DispatchWorkItem { [weak self] in
+            self?.fullscreenRetry = nil
+            self?.logDiagnostic("fullscreen_retry=1")
+            self?.enterExhibitionWhenWindowIsReady()
+        }
+        fullscreenRetry = retry
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: retry)
+    }
+
+    private func logDiagnostic(_ message: String) {
+        guard ProcessInfo.processInfo.environment["EVOLVING_DIAGNOSTICS"] == "1" else { return }
+        print("[installation] \(message)")
     }
 
     private static var exhibitionWindow: NSWindow? {
