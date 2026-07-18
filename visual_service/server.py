@@ -41,6 +41,27 @@ class GenerationResult:
     prompt: str
 
 
+@dataclass(frozen=True)
+class ArtisticState:
+    """Deterministic shared artistic qualities, each bounded to 0...1."""
+
+    luminosity: float
+    fluidity: float
+    instability: float
+    serenity: float
+    density: float
+
+
+def artistic_state(state: dict[str, float]) -> ArtisticState:
+    return ArtisticState(
+        luminosity=.70 * state["brightness"] + .30 * state["warmth"],
+        fluidity=.65 * state["motion"] + .35 * state["abstraction"],
+        instability=.65 * state["tension"] + .35 * state["abstraction"],
+        serenity=1 - (.55 * state["tension"] + .25 * state["motion"] + .20 * state["abstraction"]),
+        density=.60 * state["motion"] + .25 * state["abstraction"] + .15 * state["tension"],
+    )
+
+
 class VisualBackend(Protocol):
     name: str
 
@@ -75,14 +96,17 @@ def parse_request(payload: object) -> tuple[dict[str, float], str | None, str | 
 
 
 def prompt_for(state: dict[str, float]) -> str:
-    light = "soft moonlit" if state["brightness"] < .35 else "luminous golden" if state["brightness"] > .65 else "diffused daylight"
+    artistic = artistic_state(state)
+    light = "subdued moonlit" if artistic.luminosity < .35 else "radiant luminous" if artistic.luminosity > .65 else "diffused daylight"
     temperature = "cool blue-green" if state["warmth"] < .4 else "amber and rose" if state["warmth"] > .65 else "pearl and lavender"
-    gesture = "restless sweeping" if state["motion"] > .65 else "slow visible" if state["motion"] > .35 else "quiet delicate"
-    mood = "unsettled high-contrast" if state["tension"] > .65 else "serene balanced" if state["tension"] < .35 else "expectant"
+    gesture = "turbulent flowing" if artistic.fluidity > .65 else "slowly flowing" if artistic.fluidity > .35 else "quiet delicate"
+    mood = "structurally unsettled, high-contrast" if artistic.instability > .65 else "serene and balanced" if artistic.serenity > .65 else "gently expectant"
+    texture = "layered dense brushwork" if artistic.density > .65 else "spacious brushwork" if artistic.density < .35 else "varied painterly texture"
+    preservation = "strongly preserve" if artistic.serenity > .65 else "preserve recognizable"
     return (
         f"museum-quality Impressionist oil painting, {light} {temperature} palette, "
-        f"layered broken-color paint and {gesture} brush strokes, subtle woven canvas texture, "
-        f"{mood} atmosphere, abstraction {state['abstraction']:.2f}, preserve the exact subjects, "
+        f"{texture}, layered broken-color paint and {gesture} brush strokes, subtle woven canvas texture, "
+        f"{mood} atmosphere, abstraction allowance {state['abstraction']:.2f}, {preservation} the exact subjects, "
         "horizon, spatial arrangement, and underlying composition of the reference painting, "
         "one continuous evolving artwork, no new scene, no hard scene cut, no text, no frame"
     )
@@ -95,25 +119,26 @@ class MockBackend:
         return {"ok": True, "backend": self.name}
 
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
+        artistic = artistic_state(state)
         reference_digest = hashlib.sha256((original or b"original") + (previous or b"previous")).hexdigest()
         seed_material = json.dumps(state, sort_keys=True) + reference_digest
         rng = random.Random(int(hashlib.sha256(seed_material.encode()).hexdigest()[:12], 16))
         width, height = 1600, 1000
-        light = int(40 + 52 * state["brightness"])
+        light = int(40 + 52 * artistic.luminosity)
         warmth = int(150 * state["warmth"])
         blue = int(180 - 110 * state["warmth"])
-        contrast = 0.55 + state["tension"] * .5
+        contrast = 0.55 + artistic.instability * .5
         strokes = []
-        count = int(55 + state["abstraction"] * 100)
+        count = int(55 + artistic.density * 100)
         for _ in range(count):
             x, y = rng.uniform(-.05, 1.05) * width, rng.uniform(-.08, 1.08) * height
-            radius = rng.uniform(25, 130) * (.75 + state["motion"])
+            radius = rng.uniform(25, 130) * (.75 + artistic.fluidity)
             alpha = rng.uniform(.08, .25) * contrast
             hue = rng.randint(-20, 20)
             color = f"rgb({max(0,min(255, light + warmth//2 + hue))},{max(0,min(255, light + warmth//3 + hue))},{max(0,min(255, blue + light//3))})"
             strokes.append(f'<ellipse cx="{x:.1f}" cy="{y:.1f}" rx="{radius:.1f}" ry="{radius*rng.uniform(.35,.9):.1f}" fill="{color}" opacity="{alpha:.3f}" transform="rotate({rng.uniform(-35,35):.1f} {x:.1f} {y:.1f})"/>')
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-<defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="rgb({light+warmth//2},{light+warmth//3},{blue})"/><stop offset="1" stop-color="rgb({max(10,light//3)},{max(15,light//4)},{max(30,blue//2)})"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="{3+state['abstraction']*8:.1f}"/></filter></defs>
+<defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="rgb({light+warmth//2},{light+warmth//3},{blue})"/><stop offset="1" stop-color="rgb({max(10,light//3)},{max(15,light//4)},{max(30,blue//2)})"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="{3+artistic.fluidity*8:.1f}"/></filter></defs>
 <rect width="100%" height="100%" fill="url(#sky)"/><g filter="url(#blur)">{''.join(strokes)}</g>
 <path d="M0 {height*.72:.0f} Q{width*.25:.0f} {height*.58:.0f} {width*.5:.0f} {height*.72:.0f} T{width} {height*.65:.0f} V{height} H0Z" fill="rgb({30+warmth//3},{40+warmth//4},{80+blue//3})" opacity=".48"/>
 </svg>'''.encode()
@@ -168,18 +193,26 @@ def diffusion_settings(
 ) -> DiffusionSettings:
     """Map normalized world state to bounded, model-safe diffusion controls."""
     drift = drift or DriftConfiguration()
+    artistic = artistic_state(state)
     # Keep Turbo below the two-effective-step boundary. At four inference
     # steps, strength >= 0.5 can replace the scene abruptly instead of evolving
-    # its paint surface.
-    strength = min(0.49, 0.25 + state["abstraction"] * 0.18 + state["motion"] * 0.06)
-    steps = 4 if turbo else max(12, round(16 + state["abstraction"] * 8 + state["motion"] * 4))
+    # its paint surface. Abstraction is the hard divergence allowance; shared
+    # artistic qualities only shape change inside its bounded headroom.
+    base_strength = 0.25 + state["abstraction"] * 0.18
+    artistic_modifier = artistic.fluidity * 0.03 + artistic.instability * 0.02
+    max_strength_for_abstraction = 0.30 + state["abstraction"] * 0.19
+    strength = min(0.49, max_strength_for_abstraction, base_strength + artistic_modifier)
+    steps = 4 if turbo else max(12, round(16 + artistic.fluidity * 8 + artistic.density * 4))
     # Turbo checkpoints are explicitly trained without classifier-free guidance.
-    guidance = 0.0 if turbo else 3.5 + state["tension"] * 3.0
-    original_weight = _interpolate(
+    guidance = 0.0 if turbo else 3.5 + artistic.instability * 3.0
+    abstraction_anchor = _interpolate(
         drift.original_anchor_low,
         drift.original_anchor_high,
         state["abstraction"],
     )
+    # Serenity can strengthen source preservation but never weaken the
+    # abstraction-defined floor supplied by DriftConfiguration.
+    original_weight = min(0.90, abstraction_anchor + artistic.serenity * 0.04)
     generation_number = sequence + 1
     if drift.pullback_interval and generation_number % drift.pullback_interval == 0:
         original_weight = min(0.90, original_weight + drift.pullback_boost)
@@ -303,14 +336,15 @@ class DiffusersBackend:
 
         # Deterministic finishing makes these controls reliable even when a model
         # responds weakly to the equivalent prompt language.
-        image = ImageEnhance.Brightness(image).enhance(0.82 + state["brightness"] * 0.36)
+        artistic = artistic_state(state)
+        image = ImageEnhance.Brightness(image).enhance(0.82 + artistic.luminosity * 0.36)
         red, green, blue = image.split()
         warmth = state["warmth"] - 0.5
         red = red.point(lambda value: max(0, min(255, value * (1.0 + warmth * 0.22))))
         blue = blue.point(lambda value: max(0, min(255, value * (1.0 - warmth * 0.22))))
         image = Image.merge("RGB", (red, green, blue))
-        image = ImageEnhance.Contrast(image).enhance(0.88 + state["tension"] * 0.30)
-        return ImageEnhance.Sharpness(image).enhance(0.92 + state["tension"] * 0.22)
+        image = ImageEnhance.Contrast(image).enhance(0.88 + artistic.instability * 0.30)
+        return ImageEnhance.Sharpness(image).enhance(0.92 + artistic.instability * 0.22)
 
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
         with self._lock:

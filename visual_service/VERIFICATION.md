@@ -32,11 +32,12 @@ The Swift request/response contract did not change. Each real request resolves
 the original path and the bounded-cache predecessor ID. The backend then:
 
 1. Center-crops both references to 1024×576.
-2. Blends previous → original with a 72%→50% original weight as abstraction
-   moves from 0→1.
+2. Blends previous → original with a 72%→50% abstraction-based original
+   weight, plus up to 4% additional preservation from serenity.
 3. Adds a 10% original pull-back every fifth successful inference.
-4. Runs SDXL Turbo Img2Img at four steps and strength
-   `min(0.49, 0.25 + abstraction×0.18 + motion×0.06)`.
+4. Runs SDXL Turbo Img2Img at four steps. Abstraction sets a hard strength cap
+   of `0.30 + abstraction×0.19`; fluidity and instability shape strength only
+   inside that allowance, with a global ceiling of 0.49.
 5. Blends 16%→8% of the original back into the generated raster.
 6. Applies deterministic brightness, temperature, contrast, and sharpness
    finishing derived from WorldState.
@@ -47,9 +48,16 @@ The final normal/default temporal state was:
 {"brightness":0.55,"warmth":0.50,"abstraction":0.30,"motion":0.35,"tension":0.30}
 ```
 
-The corresponding normal Img2Img strength was 0.325, continuous original input
-weight was 0.63 (0.73 every fifth frame), and output original weight was 0.136.
-Seeds changed deterministically with state and backend sequence.
+The current merged mapping gives this state an Img2Img strength of 0.320,
+continuous original input weight of 0.682 (0.782 every fifth frame), and output
+original weight of 0.136. Seeds change deterministically with state and backend
+sequence.
+
+The recorded real run below preceded the final shared-artistic-state integration
+and used strength 0.325 and input weights 0.63/0.73. It verifies the SDXL model,
+resolution, two-stage anchoring, pull-back cadence, and temporal behavior; the
+exact merged equations are covered by the automated regression suite rather
+than a newly recorded 20-frame live run.
 
 The first tuning used a 0.68 strength ceiling and a 42%/4% high-abstraction
 input/output anchor. The default 20-frame chain was coherent, but manual review
@@ -108,10 +116,11 @@ with the other four values held at the default above.
 | Brightness 0.05 vs 0.95 | Mean luminance 118.002 vs 164.507 | Clearly darker vs luminous without a composition change. |
 | Warmth 0.05 vs 0.95 | Mean red-minus-blue −75.285 vs −16.859 | Clearly cool blue vs warm pink/gold atmosphere without a composition change. |
 
-Motion changes deterministic seed and contributes at most 0.06 to Img2Img
-strength. Tension changes final contrast/sharpness and prompt atmosphere; for a
-non-Turbo override model it also maps CFG from 3.5→6.5. Turbo guidance remains
-zero as required by the model.
+Motion changes the deterministic seed and contributes to fluidity and density.
+Tension contributes to instability and serenity. Fluidity and instability may
+increase Img2Img strength only below the abstraction-defined cap; instability
+also changes final contrast/sharpness, prompt atmosphere, and non-Turbo CFG.
+Turbo guidance remains zero as required by the model.
 
 ## Automated versus manual visual assessment
 
@@ -169,10 +178,11 @@ uv run --frozen --extra diffusion python -m unittest discover \
 ./scripts/verify.sh
 ```
 
-- Diffusion environment: 22 Python tests passed, including reference blending,
+- Diffusion environment: 30 Python tests passed, including shared golden
+  vectors, abstraction hard constraints, reference blending,
   pull-back cadence, high-abstraction strength ceiling, final color grading,
   raster contract, health metadata, offline model resolution, and LRU eviction.
-- Dependency-free mock environment: 18 tests passed and four Pillow-only tests
+- Dependency-free mock environment: 26 tests passed and four Pillow-only tests
   skipped as intended.
 - `swift build` passed for all targets.
 - Two mock HTTP generations decoded with AppKit and failure recovery passed.

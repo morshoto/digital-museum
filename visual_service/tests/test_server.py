@@ -88,6 +88,16 @@ class VisualServiceTests(unittest.TestCase):
         result = backend.generate(VALID_STATE, None, None)
         self.assertEqual(result.media_type, "image/svg+xml")
 
+    def test_three_contrasting_artistic_states_produce_distinct_visuals(self):
+        states = [
+            {"brightness": .15, "warmth": .20, "abstraction": .10, "motion": .10, "tension": .08},
+            {"brightness": .88, "warmth": .82, "abstraction": .38, "motion": .78, "tension": .18},
+            {"brightness": .42, "warmth": .35, "abstraction": .92, "motion": .88, "tension": .90},
+        ]
+        results = [MockBackend().generate(state, None, None) for state in states]
+        self.assertEqual(len({result.prompt for result in results}), 3)
+        self.assertEqual(len({result.image for result in results}), 3)
+
     def test_backend_failure_is_a_controlled_json_error(self):
         class FailingBackend:
             name = "failing"

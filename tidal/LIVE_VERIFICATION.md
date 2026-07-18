@@ -1,5 +1,10 @@
 # TidalCycles live verification
 
+> This document records the pre-Phase-C independent raw-control baseline.
+> Phase C preserves those five paths but replaces the one-to-one musical
+> mapping with the derived shared artistic state. Current runtime evidence is
+> in [`../docs/PHASE_C_VERIFICATION.md`](../docs/PHASE_C_VERIFICATION.md).
+
 Verified on 2026-07-18 on Apple Silicon macOS with the built-in Mac mini
 speakers selected as the default output.
 

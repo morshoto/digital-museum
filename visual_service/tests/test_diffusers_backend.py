@@ -1,23 +1,101 @@
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from visual_service.server import DriftConfiguration, DiffusersBackend, diffusion_settings, model_load_source
+from visual_service.server import (
+    DriftConfiguration,
+    DiffusersBackend,
+    artistic_state,
+    diffusion_settings,
+    model_load_source,
+    prompt_for,
+)
 
 
 VALID_STATE = {"brightness": .5, "warmth": .5, "abstraction": .3, "motion": .4, "tension": .2}
 
 
 class DiffusionMappingTests(unittest.TestCase):
+    def test_artistic_state_matches_shared_golden_vectors(self):
+        vectors_path = Path(__file__).resolve().parents[2] / "verification" / "artistic_state_vectors.json"
+        vectors = json.loads(vectors_path.read_text())
+        self.assertTrue(vectors)
+        for vector in vectors:
+            actual = artistic_state(vector["input"])
+            for name, expected in vector["expected"].items():
+                self.assertAlmostEqual(getattr(actual, name), expected, places=9, msg=f"{vector['name']} {name}")
+
+    def test_artistic_state_is_bounded_and_deterministic(self):
+        for state in (
+            {key: 0 for key in VALID_STATE},
+            VALID_STATE,
+            {key: 1 for key in VALID_STATE},
+        ):
+            first = artistic_state(state)
+            self.assertEqual(first, artistic_state(state))
+            for value in first.__dict__.values():
+                self.assertGreaterEqual(value, 0)
+                self.assertLessEqual(value, 1)
+
+    def test_raw_parameters_change_expected_artistic_dimensions(self):
+        baseline = artistic_state(VALID_STATE)
+        bright = artistic_state(dict(VALID_STATE, brightness=1))
+        moving = artistic_state(dict(VALID_STATE, motion=1))
+        tense = artistic_state(dict(VALID_STATE, tension=1))
+        abstract = artistic_state(dict(VALID_STATE, abstraction=1))
+        self.assertGreater(bright.luminosity, baseline.luminosity)
+        self.assertGreater(moving.fluidity, baseline.fluidity)
+        self.assertGreater(moving.density, baseline.density)
+        self.assertGreater(tense.instability, baseline.instability)
+        self.assertLess(tense.serenity, baseline.serenity)
+        self.assertGreater(abstract.fluidity, baseline.fluidity)
+        self.assertGreater(abstract.instability, baseline.instability)
+
+    def test_visual_prompt_consumes_shared_artistic_qualities(self):
+        calm = prompt_for({"brightness": .1, "warmth": .1, "abstraction": .1, "motion": .1, "tension": .1})
+        turbulent = prompt_for({"brightness": .9, "warmth": .9, "abstraction": .9, "motion": .9, "tension": .9})
+        self.assertIn("subdued moonlit", calm)
+        self.assertIn("quiet delicate", calm)
+        self.assertIn("strongly preserve", calm)
+        self.assertIn("radiant luminous", turbulent)
+        self.assertIn("turbulent flowing", turbulent)
+        self.assertIn("structurally unsettled", turbulent)
+
     def test_abstraction_and_motion_raise_img2img_strength(self):
         calm = diffusion_settings(dict(VALID_STATE, abstraction=.1, motion=.1), 0, turbo=True)
         active = diffusion_settings(dict(VALID_STATE, abstraction=.9, motion=.9), 0, turbo=True)
         self.assertGreater(active.strength, calm.strength)
         self.assertGreaterEqual(calm.num_inference_steps * calm.strength, 1)
         self.assertLess(active.strength, .5)
+
+    def test_abstraction_caps_divergence_despite_high_motion_and_tension(self):
+        constrained = diffusion_settings(
+            dict(VALID_STATE, abstraction=0, motion=1, tension=1),
+            0,
+            turbo=True,
+        )
+        self.assertLessEqual(constrained.strength, .30)
+        self.assertGreaterEqual(constrained.original_weight, .55)
+
+    def test_artistic_qualities_shape_change_inside_abstraction_allowance(self):
+        quiet = diffusion_settings(
+            dict(VALID_STATE, abstraction=.6, motion=0, tension=0),
+            0,
+            turbo=True,
+        )
+        active = diffusion_settings(
+            dict(VALID_STATE, abstraction=.6, motion=1, tension=1),
+            0,
+            turbo=True,
+        )
+        abstraction_cap = .30 + .6 * .19
+        self.assertGreater(active.strength, quiet.strength)
+        self.assertLessEqual(active.strength, abstraction_cap)
+        self.assertLessEqual(quiet.strength, abstraction_cap)
 
     def test_turbo_uses_no_classifier_free_guidance(self):
         low = diffusion_settings(dict(VALID_STATE, tension=0), 0, turbo=True)
@@ -42,6 +120,12 @@ class DiffusionMappingTests(unittest.TestCase):
     def test_drift_configuration_rejects_inverted_abstraction_mapping(self):
         with self.assertRaisesRegex(RuntimeError, "low-abstraction original anchor"):
             DriftConfiguration(original_anchor_low=.3, original_anchor_high=.6)
+
+    def test_instability_raises_non_turbo_guidance_without_breaking_anchor_constraint(self):
+        calm = diffusion_settings(dict(VALID_STATE, abstraction=0, motion=0, tension=0), 0, turbo=False)
+        unstable = diffusion_settings(dict(VALID_STATE, abstraction=1, motion=1, tension=1), 0, turbo=False)
+        self.assertGreater(unstable.guidance_scale, calm.guidance_scale)
+        self.assertLess(unstable.original_weight, calm.original_weight)
 
     def test_motion_and_sequence_change_seed(self):
         first = diffusion_settings(VALID_STATE, 0, turbo=True)

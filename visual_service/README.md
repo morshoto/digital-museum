@@ -75,13 +75,24 @@ usage to grow over a long-running exhibition.
 
 ## WorldState mapping and drift control
 
-| State | Diffusion mapping |
+The unchanged five-field request is converted into the deterministic shared
+artistic state documented in [`../docs/SHARED_ARTISTIC_STATE.md`](../docs/SHARED_ARTISTIC_STATE.md).
+
+| Artistic quality | Diffusion mapping |
 | --- | --- |
-| brightness | Final exposure from 0.82× to 1.18× plus prompt illumination |
-| warmth | Final red/blue temperature separation (±11%) plus palette prompt |
-| abstraction | Img2Img strength, continuous original anchoring, and output pull-back |
-| motion | A bounded addition to Img2Img strength, changing deterministic seed, and brush-motion prompt |
-| tension | Final contrast/sharpness, atmosphere prompt, and CFG for non-Turbo models |
+| luminosity | Final exposure plus prompt illumination |
+| fluidity | Bounded Img2Img strength modifier, flowing gesture prompt, and mock stroke deformation |
+| instability | Bounded strength modifier, final contrast/sharpness, structural prompt, and non-Turbo CFG |
+| serenity | Additional original-image anchoring and composition-preservation prompt |
+| density | Non-Turbo step count, texture prompt, and mock stroke count |
+
+Raw `warmth` retains red/blue source color-temperature scaling and palette
+language. The generation sequence still changes the deterministic seed so
+successive frames evolve without adding an independent artistic-state input.
+Abstraction remains a hard divergence constraint: strength is capped by
+`0.30 + 0.19 × abstraction` and never reaches the global `0.49` Turbo
+scene-replacement boundary. Fluidity and instability shape deformation only
+inside that allowance.
 
 For SDXL Turbo, classifier-free guidance is correctly disabled. Four steps and
 a minimum strength of 0.25 satisfy the model's Img2Img requirement that
@@ -89,15 +100,12 @@ a minimum strength of 0.25 satisfy the model's Img2Img requirement that
 
 Each sequential source is a blend of the previous generated image and the
 original painting. Continuous original weight ranges from 72% at zero
-abstraction to 50% at maximum abstraction. Every fifth generation adds a 10%
-pull-back, and the generated result receives a second 16%→8% original blend
-before deterministic color finishing. Img2Img strength ranges from 0.25 to a
-hard ceiling of 0.49 and is driven primarily by abstraction with a smaller
-motion contribution. This keeps four-step Turbo inference below the abrupt
-two-effective-step scene-replacement boundary found during manual inspection.
-These controls stop repeated Img2Img from becoming an
-unanchored random walk while still allowing visible evolution. A backend lock
-prevents concurrent access to the non-thread-safe MPS pipeline.
+abstraction to 50% at maximum abstraction, with serenity adding up to four
+percentage points of preservation. Every fifth generation adds a 10% pull-back,
+and the generated result receives a second 16%→8% original blend before
+deterministic artistic-state finishing. These controls stop repeated Img2Img
+from becoming an unanchored random walk while still allowing visible evolution.
+A backend lock prevents concurrent access to the non-thread-safe MPS pipeline.
 
 Drift behavior is configurable without changing the HTTP contract:
 

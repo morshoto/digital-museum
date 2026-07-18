@@ -1,0 +1,32 @@
+[
+  {
+    "name": "all-zero",
+    "input": {"brightness": 0.0, "warmth": 0.0, "abstraction": 0.0, "motion": 0.0, "tension": 0.0},
+    "expected": {"luminosity": 0.0, "fluidity": 0.0, "instability": 0.0, "serenity": 1.0, "density": 0.0}
+  },
+  {
+    "name": "all-one",
+    "input": {"brightness": 1.0, "warmth": 1.0, "abstraction": 1.0, "motion": 1.0, "tension": 1.0},
+    "expected": {"luminosity": 1.0, "fluidity": 1.0, "instability": 1.0, "serenity": 0.0, "density": 1.0}
+  },
+  {
+    "name": "A-calm-dark",
+    "input": {"brightness": 0.15, "warmth": 0.20, "abstraction": 0.10, "motion": 0.10, "tension": 0.08},
+    "expected": {"luminosity": 0.165, "fluidity": 0.100, "instability": 0.087, "serenity": 0.911, "density": 0.097}
+  },
+  {
+    "name": "B-luminous-fluid",
+    "input": {"brightness": 0.88, "warmth": 0.82, "abstraction": 0.38, "motion": 0.78, "tension": 0.18},
+    "expected": {"luminosity": 0.862, "fluidity": 0.640, "instability": 0.250, "serenity": 0.630, "density": 0.590}
+  },
+  {
+    "name": "C-tense-abstract",
+    "input": {"brightness": 0.42, "warmth": 0.35, "abstraction": 0.92, "motion": 0.88, "tension": 0.90},
+    "expected": {"luminosity": 0.399, "fluidity": 0.894, "instability": 0.907, "serenity": 0.101, "density": 0.893}
+  },
+  {
+    "name": "asymmetric-probe",
+    "input": {"brightness": 0.73, "warmth": 0.12, "abstraction": 0.44, "motion": 0.67, "tension": 0.29},
+    "expected": {"luminosity": 0.547, "fluidity": 0.5895, "instability": 0.3425, "serenity": 0.585, "density": 0.5555}
+  }
+]

@@ -7,6 +7,12 @@ private struct VerificationFailure: Error, CustomStringConvertible {
     let description: String
 }
 
+private struct ArtisticStateVector: Decodable {
+    let name: String
+    let input: WorldState
+    let expected: ArtisticState
+}
+
 private final class OSCCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var messages: [(String, Float)] = []
@@ -50,6 +56,7 @@ struct VerificationRunner {
     static func main() async {
         do {
             try verifyParameters()
+            try verifyArtisticState()
             try await verifyOSC()
             try await verifyOSCWithoutReceiver()
             try await verifyVisualIntegration()
@@ -128,6 +135,62 @@ struct VerificationRunner {
         engine.configurations[.brightness] = edited
         try require(abs(engine.sample(at: sampleTime).brightness - beforeConfigurationEdit) > 0.000001, "live modulation controls did not affect sampling")
         print("PASS: all five live parameters, modulation controls, bounded overrides, and return to automatic modulation")
+    }
+
+    private static func verifyArtisticState() throws {
+        let samples = [
+            WorldState(brightness: 0, warmth: 0, abstraction: 0, motion: 0, tension: 0),
+            WorldState(),
+            WorldState(brightness: 1, warmth: 1, abstraction: 1, motion: 1, tension: 1),
+            WorldState(brightness: 0.82, warmth: 0.74, abstraction: 0.48, motion: 0.67, tension: 0.31),
+        ]
+        for world in samples {
+            let first = world.artistic
+            let second = world.artistic
+            try require(first == second, "identical WorldState produced different artistic state")
+            for (name, value) in [
+                ("luminosity", first.luminosity), ("fluidity", first.fluidity),
+                ("instability", first.instability), ("serenity", first.serenity),
+                ("density", first.density),
+            ] {
+                try require((0...1).contains(value), "derived \(name) escaped 0...1")
+            }
+        }
+
+        let baseline = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 0.5, motion: 0.5, tension: 0.5)
+        try require(WorldState(brightness: 1, warmth: 0.5, abstraction: 0.5, motion: 0.5, tension: 0.5).artistic.luminosity > baseline.artistic.luminosity, "brightness did not raise luminosity")
+        try require(WorldState(brightness: 0.5, warmth: 0.5, abstraction: 0.5, motion: 1, tension: 0.5).artistic.fluidity > baseline.artistic.fluidity, "motion did not raise fluidity")
+        let tense = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 0.5, motion: 0.5, tension: 1).artistic
+        try require(tense.instability > baseline.artistic.instability && tense.serenity < baseline.artistic.serenity, "tension did not raise instability and lower serenity")
+        let abstract = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 1, motion: 0.5, tension: 0.5).artistic
+        try require(abstract.fluidity > baseline.artistic.fluidity && abstract.instability > baseline.artistic.instability && abstract.density > baseline.artistic.density, "abstraction did not affect its intended qualities")
+
+        let sourceFile = URL(fileURLWithPath: #filePath)
+        let defaultVectorsURL = sourceFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("verification/artistic_state_vectors.json")
+        let vectorsURL = ProcessInfo.processInfo.environment["ARTISTIC_STATE_VECTORS"]
+            .map { URL(fileURLWithPath: $0) } ?? defaultVectorsURL
+        let vectors = try JSONDecoder().decode(
+            [ArtisticStateVector].self,
+            from: Data(contentsOf: vectorsURL)
+        )
+        try require(!vectors.isEmpty, "artistic-state golden vectors were empty")
+        for vector in vectors {
+            let actual = vector.input.artistic
+            for (name, actualValue, expectedValue) in [
+                ("luminosity", actual.luminosity, vector.expected.luminosity),
+                ("fluidity", actual.fluidity, vector.expected.fluidity),
+                ("instability", actual.instability, vector.expected.instability),
+                ("serenity", actual.serenity, vector.expected.serenity),
+                ("density", actual.density, vector.expected.density),
+            ] {
+                try require(abs(actualValue - expectedValue) < 0.000000001, "\(vector.name) \(name) drifted from the shared golden vector")
+            }
+        }
+        print("PASS: deterministic bounded artistic state, directional relationships, and \(vectors.count) shared golden vectors")
     }
 
     private static func requireValue<T>(_ value: T?, _ message: String) throws -> T {
