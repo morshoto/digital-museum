@@ -1,6 +1,18 @@
 import Foundation
 
-public struct PaintingReference: Identifiable, Equatable, Sendable {
+public struct PaintingVisualBias: Codable, Equatable, Sendable {
+    public let palette: String
+    public let brush: String
+    public let structure: String
+
+    public init(palette: String, brush: String, structure: String) {
+        self.palette = palette
+        self.brush = brush
+        self.structure = structure
+    }
+}
+
+public struct PaintingReference: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let artist: String
@@ -8,6 +20,10 @@ public struct PaintingReference: Identifiable, Equatable, Sendable {
     public let resourceFilename: String
     public let sourceInstitution: String
     public let sourceURL: URL
+    public let tags: [String]
+    public let defaultState: WorldState
+    public let visualBias: PaintingVisualBias
+    public let promptBias: [String]
 
     public init(
         id: String,
@@ -16,7 +32,11 @@ public struct PaintingReference: Identifiable, Equatable, Sendable {
         date: String,
         resourceFilename: String,
         sourceInstitution: String,
-        sourceURL: URL
+        sourceURL: URL,
+        tags: [String] = [],
+        defaultState: WorldState = WorldState(),
+        visualBias: PaintingVisualBias = .init(palette: "broken color", brush: "visible strokes", structure: "reference composition"),
+        promptBias: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -25,63 +45,66 @@ public struct PaintingReference: Identifiable, Equatable, Sendable {
         self.resourceFilename = resourceFilename
         self.sourceInstitution = sourceInstitution
         self.sourceURL = sourceURL
+        self.tags = tags
+        self.defaultState = defaultState
+        self.visualBias = visualBias
+        self.promptBias = promptBias
     }
 }
 
-public struct PaintingCatalog: Equatable, Sendable {
+public struct PaintingRotationConfiguration: Codable, Equatable, Sendable {
+    public let minimumDwellGenerations: Int
+    public let maximumDwellGenerations: Int
+    public let transitionGenerations: Int
+    public let stateBias: Double
+
+    public init(
+        minimumDwellGenerations: Int = 24,
+        maximumDwellGenerations: Int = 96,
+        transitionGenerations: Int = 6,
+        stateBias: Double = 0.12
+    ) {
+        self.minimumDwellGenerations = minimumDwellGenerations
+        self.maximumDwellGenerations = maximumDwellGenerations
+        self.transitionGenerations = transitionGenerations
+        self.stateBias = stateBias
+    }
+}
+
+public struct PaintingCatalog: Codable, Equatable, Sendable {
+    public let version: Int
     public let paintings: [PaintingReference]
     public let defaultPaintingID: PaintingReference.ID
+    public let rotation: PaintingRotationConfiguration
 
-    public init(paintings: [PaintingReference], defaultPaintingID: PaintingReference.ID) {
+    public init(
+        paintings: [PaintingReference],
+        defaultPaintingID: PaintingReference.ID,
+        version: Int = 1,
+        rotation: PaintingRotationConfiguration = .init()
+    ) {
+        self.version = version
         self.paintings = paintings
         self.defaultPaintingID = defaultPaintingID
+        self.rotation = rotation
     }
 
     public var defaultPainting: PaintingReference? {
         paintings.first { $0.id == defaultPaintingID }
     }
 
-    public static let bundled = PaintingCatalog(
-        paintings: [
-            PaintingReference(
-                id: "monet-water-lilies-1906",
-                title: "Water Lilies",
-                artist: "Claude Monet",
-                date: "1906",
-                resourceFilename: "monet-water-lilies.png",
-                sourceInstitution: "Art Institute of Chicago",
-                sourceURL: URL(string: "https://www.artic.edu/artworks/16568/water-lilies")!
-            ),
-            PaintingReference(
-                id: "monet-water-lily-pond-1900",
-                title: "Water Lily Pond",
-                artist: "Claude Monet",
-                date: "1900",
-                resourceFilename: "monet-water-lily-pond.png",
-                sourceInstitution: "Art Institute of Chicago",
-                sourceURL: URL(string: "https://www.artic.edu/artworks/87088/water-lily-pond")!
-            ),
-            PaintingReference(
-                id: "monet-stacks-of-wheat-1890",
-                title: "Stacks of Wheat (End of Summer)",
-                artist: "Claude Monet",
-                date: "1890–91",
-                resourceFilename: "monet-stacks-of-wheat.png",
-                sourceInstitution: "Art Institute of Chicago",
-                sourceURL: URL(string: "https://www.artic.edu/artworks/64818/stacks-of-wheat-end-of-summer")!
-            ),
-            PaintingReference(
-                id: "monet-beach-at-sainte-adresse-1867",
-                title: "The Beach at Sainte-Adresse",
-                artist: "Claude Monet",
-                date: "1867",
-                resourceFilename: "monet-beach-at-sainte-adresse.png",
-                sourceInstitution: "Art Institute of Chicago",
-                sourceURL: URL(string: "https://www.artic.edu/artworks/14598/the-beach-at-sainte-adresse")!
-            ),
-        ],
-        defaultPaintingID: "monet-water-lilies-1906"
-    )
+    public static var bundled: PaintingCatalog { try! loadBundled() }
+
+    public static func loadBundled() throws -> PaintingCatalog {
+        guard let url = Bundle.module.url(forResource: "catalog", withExtension: "json", subdirectory: "Paintings") else {
+            throw OriginalImageResolutionError.missingBundledCatalog
+        }
+        do {
+            return try JSONDecoder().decode(PaintingCatalog.self, from: Data(contentsOf: url))
+        } catch {
+            throw OriginalImageResolutionError.invalidBundledCatalog(error.localizedDescription)
+        }
+    }
 }
 
 public enum OriginalImageSource: Equatable, Sendable {
@@ -103,13 +126,19 @@ public struct OriginalImageResolution: Equatable, Sendable {
 
 public enum OriginalImageResolutionError: LocalizedError, Equatable {
     case invalidOverride(String)
+    case missingBundledCatalog
+    case invalidBundledCatalog(String)
     case missingDefaultPainting(String)
     case missingBundledResource(String)
 
     public var errorDescription: String? {
         switch self {
         case .invalidOverride(let path):
-            "EVOLVING_ORIGINAL_IMAGE must point to a readable image file, but none exists at '\(path)'. Correct the path or unset the variable to use the bundled Monet reference."
+            "EVOLVING_ORIGINAL_IMAGE must point to a readable image file, but none exists at '\(path)'. Correct the path or unset the variable to use the bundled painting catalog."
+        case .missingBundledCatalog:
+            "The bundled painting catalog is missing from the SwiftPM resource bundle. Rebuild or reinstall EvolvingImpressionist."
+        case .invalidBundledCatalog(let detail):
+            "The bundled painting catalog could not be decoded: \(detail)"
         case .missingDefaultPainting(let id):
             "The bundled painting catalog does not contain its configured default '\(id)'."
         case .missingBundledResource(let filename):
@@ -121,13 +150,14 @@ public enum OriginalImageResolutionError: LocalizedError, Equatable {
 public enum OriginalImageResolver {
     public static func resolve(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        catalog: PaintingCatalog = .bundled
+        catalog: PaintingCatalog? = nil
     ) throws -> OriginalImageResolution {
         if let overridePath = environment["EVOLVING_ORIGINAL_IMAGE"] {
             return try resolveOverride(path: overridePath)
         }
-        guard let painting = catalog.defaultPainting else {
-            throw OriginalImageResolutionError.missingDefaultPainting(catalog.defaultPaintingID)
+        let selectedCatalog = try catalog ?? PaintingCatalog.loadBundled()
+        guard let painting = selectedCatalog.defaultPainting else {
+            throw OriginalImageResolutionError.missingDefaultPainting(selectedCatalog.defaultPaintingID)
         }
         guard let url = Bundle.module.url(
             forResource: painting.resourceFilename,

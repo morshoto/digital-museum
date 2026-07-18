@@ -2,6 +2,47 @@
 
 Date: 2026-07-18 (Asia/Tokyo)
 
+## Phase D multi-world verification
+
+The eight-work catalog and multi-anchor bridge were verified on Apple Silicon
+MPS at 1024×576. A 20-generation Monet stream completed with an average latency
+of 3.573 seconds (2.960 minimum, 3.811 maximum), complete predecessor chaining,
+and an original anchor on every request. Adjacent-frame mean absolute
+difference averaged 8.824, while original edge correlation remained 0.7052 at
+generation 1 and 0.7143 at generation 20.
+
+The Swift verifier then generated and submitted all six smootherstep anchors
+from Monet's *Water Lilies* into Renoir's *Two Sisters*. Every real response was
+a decodable PNG, retained the immediately preceding generated frame, and used
+the mixed original. Steps 1–5 resolved a two-profile bridge prompt; step 6
+settled on the Renoir profile. Manual review of the six-frame contact sheet
+showed water and lilies remaining present as the figure and terrace emerged,
+with no blank, hard cut, or unrelated scene.
+
+The first profile-prompt run exposed CLIP's 77-token truncation limit. Profile
+language was moved first and compacted. Exhaustive local-tokenizer checks over
+all eight settled profiles, adjacent bridges, bridge progress samples, and
+state extremes now peak at 74 tokens. A repeated eight-generation real service
+run emitted zero token-length or truncation warnings.
+
+```sh
+HF_HUB_OFFLINE=1 EVOLVING_BACKEND=diffusers \
+EVOLVING_VISUAL_PORT=8896 EVOLVING_IMAGE_WIDTH=1024 \
+EVOLVING_IMAGE_HEIGHT=576 \
+uv run --frozen --extra diffusion python -u backend/server.py
+
+uv run --frozen --extra diffusion python backend/verify_real.py \
+  --url http://127.0.0.1:8896 \
+  --original application/EvolvingImpressionistCore/Resources/Paintings/monet-water-lilies.png \
+  --output-dir /tmp/evolving-phase-d-real \
+  --generations 20
+
+VISUAL_SERVICE_URL=http://127.0.0.1:8896 \
+EXPECTED_VISUAL_BACKEND=diffusers \
+VISUAL_ARTIFACT_DIR=/tmp/evolving-phase-d-bridge \
+swift run EvolvingImpressionistVerify
+```
+
 ## Environment and selected backend
 
 - Apple M4 Pro (20 GPU cores), arm64, macOS 26.5.1, 64 GB unified memory

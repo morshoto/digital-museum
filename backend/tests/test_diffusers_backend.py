@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from backend.painting_world import PaintingInfluence, PaintingPromptResolver
 from backend.server import (
     DriftConfiguration,
     DiffusersBackend,
@@ -58,12 +59,47 @@ class DiffusionMappingTests(unittest.TestCase):
     def test_visual_prompt_consumes_shared_artistic_qualities(self):
         calm = prompt_for({"brightness": .1, "warmth": .1, "abstraction": .1, "motion": .1, "tension": .1})
         turbulent = prompt_for({"brightness": .9, "warmth": .9, "abstraction": .9, "motion": .9, "tension": .9})
-        self.assertIn("subdued moonlit", calm)
-        self.assertIn("quiet delicate", calm)
-        self.assertIn("strongly preserve", calm)
-        self.assertIn("radiant luminous", turbulent)
-        self.assertIn("turbulent flowing", turbulent)
-        self.assertIn("structurally unsettled", turbulent)
+        self.assertIn("moonlit", calm)
+        self.assertIn("delicate", calm)
+        self.assertIn("strictly preserve", calm)
+        self.assertIn("luminous", turbulent)
+        self.assertIn("turbulent", turbulent)
+        self.assertIn("unsettled", turbulent)
+
+    def test_catalog_prompts_fit_sdxl_clip_token_limit(self):
+        try:
+            from transformers import CLIPTokenizer
+        except ImportError:
+            self.skipTest("Transformers is only required by the real backend")
+        try:
+            tokenizer = CLIPTokenizer.from_pretrained(
+                model_load_source("stabilityai/sdxl-turbo"),
+                subfolder="tokenizer",
+                local_files_only=True,
+            )
+        except OSError:
+            self.skipTest("SDXL Turbo tokenizer is not available in the local model cache")
+
+        directory = Path(__file__).resolve().parents[2] / "application" / "EvolvingImpressionistCore" / "Resources" / "Paintings"
+        catalog = json.loads((directory / "catalog.json").read_text())
+        resolver = PaintingPromptResolver()
+        profiles = [
+            resolver.resolve(str(directory / value["resourceFilename"])).current
+            for value in catalog["paintings"]
+        ]
+        states = [
+            {key: 0 for key in VALID_STATE},
+            VALID_STATE,
+            {key: 1 for key in VALID_STATE},
+        ]
+        for state in states:
+            for index, current in enumerate(profiles):
+                settled = prompt_for(state, PaintingInfluence(current, None, 0, .12))
+                self.assertLessEqual(len(tokenizer(settled, truncation=False).input_ids), 77)
+                target = profiles[(index + 1) % len(profiles)]
+                for progress in (.04, .21, .50, .79, .96):
+                    bridge = prompt_for(state, PaintingInfluence(current, target, progress, .12))
+                    self.assertLessEqual(len(tokenizer(bridge, truncation=False).input_ids), 77)
 
     def test_abstraction_and_motion_raise_img2img_strength(self):
         calm = diffusion_settings(dict(VALID_STATE, abstraction=.1, motion=.1), 0, turbo=True)

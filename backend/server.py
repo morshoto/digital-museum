@@ -18,6 +18,11 @@ from typing import Protocol
 from urllib.parse import urlparse
 import uuid
 
+try:
+    from backend.painting_world import PaintingInfluence, PaintingPromptResolver
+except ModuleNotFoundError:
+    from painting_world import PaintingInfluence, PaintingPromptResolver
+
 
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
 DEFAULT_DIFFUSERS_MODEL = "stabilityai/sdxl-turbo"
@@ -65,7 +70,13 @@ def artistic_state(state: dict[str, float]) -> ArtisticState:
 class VisualBackend(Protocol):
     name: str
 
-    def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult: ...
+    def generate(
+        self,
+        state: dict[str, float],
+        original: bytes | None,
+        previous: bytes | None,
+        painting: PaintingInfluence | None = None,
+    ) -> GenerationResult: ...
 
     def health(self) -> dict[str, object]: ...
 
@@ -95,20 +106,18 @@ def parse_request(payload: object) -> tuple[dict[str, float], str | None, str | 
     return parsed, original_path, previous_id
 
 
-def prompt_for(state: dict[str, float]) -> str:
+def prompt_for(state: dict[str, float], painting: PaintingInfluence | None = None) -> str:
     artistic = artistic_state(state)
-    light = "subdued moonlit" if artistic.luminosity < .35 else "radiant luminous" if artistic.luminosity > .65 else "diffused daylight"
-    temperature = "cool blue-green" if state["warmth"] < .4 else "amber and rose" if state["warmth"] > .65 else "pearl and lavender"
-    gesture = "turbulent flowing" if artistic.fluidity > .65 else "slowly flowing" if artistic.fluidity > .35 else "quiet delicate"
-    mood = "structurally unsettled, high-contrast" if artistic.instability > .65 else "serene and balanced" if artistic.serenity > .65 else "gently expectant"
-    texture = "layered dense brushwork" if artistic.density > .65 else "spacious brushwork" if artistic.density < .35 else "varied painterly texture"
-    preservation = "strongly preserve" if artistic.serenity > .65 else "preserve recognizable"
+    light = "moonlit" if artistic.luminosity < .35 else "luminous" if artistic.luminosity > .65 else "daylight"
+    temperature = "cool blue-green" if state["warmth"] < .4 else "warm amber-rose" if state["warmth"] > .65 else "pearl-lavender"
+    gesture = "turbulent" if artistic.fluidity > .65 else "flowing" if artistic.fluidity > .35 else "delicate"
+    mood = "unsettled" if artistic.instability > .65 else "serene" if artistic.serenity > .65 else "expectant"
+    texture = "dense" if artistic.density > .65 else "open" if artistic.density < .35 else "varied"
+    preservation = "strictly preserve" if artistic.serenity > .65 else "preserve"
+    reference_world = f"{painting.prompt_fragment()}. " if painting else ""
     return (
-        f"museum-quality Impressionist oil painting, {light} {temperature} palette, "
-        f"{texture}, layered broken-color paint and {gesture} brush strokes, subtle woven canvas texture, "
-        f"{mood} atmosphere, abstraction allowance {state['abstraction']:.2f}, {preservation} the exact subjects, "
-        "horizon, spatial arrangement, and underlying composition of the reference painting, "
-        "one continuous evolving artwork, no new scene, no hard scene cut, no text, no frame"
+        f"{reference_world}Impressionist oil; {light} {temperature}; {gesture} broken-color; "
+        f"{texture}; {mood}; {preservation} composition; continuous; no cut, text, frame"
     )
 
 
@@ -118,7 +127,13 @@ class MockBackend:
     def health(self) -> dict[str, object]:
         return {"ok": True, "backend": self.name}
 
-    def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
+    def generate(
+        self,
+        state: dict[str, float],
+        original: bytes | None,
+        previous: bytes | None,
+        painting: PaintingInfluence | None = None,
+    ) -> GenerationResult:
         artistic = artistic_state(state)
         reference_digest = hashlib.sha256((original or b"original") + (previous or b"previous")).hexdigest()
         seed_material = json.dumps(state, sort_keys=True) + reference_digest
@@ -142,7 +157,7 @@ class MockBackend:
 <rect width="100%" height="100%" fill="url(#sky)"/><g filter="url(#blur)">{''.join(strokes)}</g>
 <path d="M0 {height*.72:.0f} Q{width*.25:.0f} {height*.58:.0f} {width*.5:.0f} {height*.72:.0f} T{width} {height*.65:.0f} V{height} H0Z" fill="rgb({30+warmth//3},{40+warmth//4},{80+blue//3})" opacity=".48"/>
 </svg>'''.encode()
-        return GenerationResult(svg, "image/svg+xml", prompt_for(state))
+        return GenerationResult(svg, "image/svg+xml", prompt_for(state, painting))
 
 
 @dataclass(frozen=True)
@@ -346,13 +361,19 @@ class DiffusersBackend:
         image = ImageEnhance.Contrast(image).enhance(0.88 + artistic.instability * 0.30)
         return ImageEnhance.Sharpness(image).enhance(0.92 + artistic.instability * 0.22)
 
-    def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
+    def generate(
+        self,
+        state: dict[str, float],
+        original: bytes | None,
+        previous: bytes | None,
+        painting: PaintingInfluence | None = None,
+    ) -> GenerationResult:
         with self._lock:
             settings = diffusion_settings(state, self._sequence, self.turbo, self.drift)
             self._sequence += 1
             source = self._source_image(state, original, previous, settings)
             options = {
-                "prompt": prompt_for(state),
+                "prompt": prompt_for(state, painting),
                 "image": source,
                 "strength": settings.strength,
                 "num_inference_steps": settings.num_inference_steps,
@@ -379,7 +400,7 @@ class DiffusersBackend:
             output = self._grade_image(output, state)
         encoded = io.BytesIO()
         output.save(encoded, format="PNG")
-        return GenerationResult(encoded.getvalue(), "image/png", prompt_for(state))
+        return GenerationResult(encoded.getvalue(), "image/png", prompt_for(state, painting))
 
 
 class GenerationStore:
@@ -408,7 +429,12 @@ class GenerationStore:
             return value
 
 
-def handler_for(backend: VisualBackend, store: GenerationStore):
+def handler_for(
+    backend: VisualBackend,
+    store: GenerationStore,
+    painting_resolver: PaintingPromptResolver | None = None,
+):
+    painting_resolver = painting_resolver or PaintingPromptResolver()
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: dict):
             encoded = json.dumps(body).encode()
@@ -442,7 +468,13 @@ def handler_for(backend: VisualBackend, store: GenerationStore):
                 state, original_path, previous_id = parse_request(payload)
                 original = Path(original_path).expanduser().read_bytes() if original_path else None
                 previous = store.get(previous_id)
-                result = backend.generate(state, original, previous)
+                painting = painting_resolver.resolve(original_path)
+                visual_state = painting.adjusted_state(state) if painting else state
+                result = backend.generate(visual_state, original, previous, painting) if painting else backend.generate(
+                    visual_state,
+                    original,
+                    previous,
+                )
                 generation_id = store.put(result.image)
                 self._send(200, {
                     "imageBase64": base64.b64encode(result.image).decode(),

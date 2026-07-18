@@ -57,8 +57,8 @@ never stretched. The default exactly matches a 16:9 installation display;
 override both dimensions for another display ratio. `EVOLVING_ATTENTION_SLICING=1`
 trades speed for lower peak memory pressure on smaller Macs.
 
-Swift selects the bundled Monet *Water Lilies* reference automatically and
-passes its SwiftPM resource-bundle filesystem path to this service:
+Swift starts from the bundled Monet *Water Lilies* reference automatically and
+passes a SwiftPM resource-bundle filesystem path to this service:
 
 ```sh
 swift run EvolvingImpressionist
@@ -68,10 +68,18 @@ Set `EVOLVING_ORIGINAL_IMAGE=/absolute/path/to/painting.png` on the Swift
 process to explicitly override that selection. A configured path must resolve
 to a readable file; Swift surfaces a configuration error and does not silently
 fall back if it does not. The selected path is read by the local Python
-service. The Swift request also carries the prior `generationID`, allowing the
-service to combine the persistent original anchor and previous generated raster
-on later cycles. The Diffusers validation requiring one of those references is
-unchanged.
+service. With no override, Swift retains a catalog painting for 24–96
+successful generations and then supplies six gradually blended anchor rasters
+on the way to the next profile. The request also carries the prior
+`generationID`, allowing the service to combine the active anchor and previous
+generated raster on later cycles. The Diffusers validation requiring one of
+those references is unchanged.
+
+`catalog.json` is shared by both runtimes. The service resolves subject,
+palette, brush, structure, and bounded default-state bias from a settled
+resource filename or Swift's deterministic bridge filename. This interpretation
+does not add a request field. Unknown paths, including an explicit
+`EVOLVING_ORIGINAL_IMAGE`, keep the original single-anchor behavior.
 
 Generated raster history is a thread-safe, bounded LRU containing at most 16
 frames. The normal chain only needs the latest predecessor; the additional
@@ -98,6 +106,10 @@ Abstraction remains a hard divergence constraint: strength is capped by
 `0.28 + 0.14 × abstraction` and has a global `0.42` ceiling. Fluidity and
 instability shape deformation only inside that allowance. This lower
 per-generation change is calibrated for the five-second continuous stream.
+For bundled catalog references, the active profile contributes 12% of its
+default state to visual controls, hard-capped at 20%. During an anchor bridge,
+both profile defaults and prompt language use the same progress. Raw WorldState
+transport and its audio consumers are unchanged.
 
 For SDXL Turbo, classifier-free guidance is correctly disabled. Four steps and
 a minimum strength of 0.25 satisfy the model's Img2Img requirement that
@@ -147,7 +159,7 @@ know which model or drift-control algorithm consumed them.
 Run backend tests in the real environment:
 
 ```sh
-uv run --frozen --extra diffusion python -m py_compile backend/server.py backend/verify_real.py
+uv run --frozen --extra diffusion python -m py_compile backend/server.py backend/painting_world.py backend/verify_real.py
 uv run --frozen --extra diffusion python -m unittest discover -s backend/tests -v
 ```
 

@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "defaultPaintingID": "monet-water-lilies-1906",
+  "rotation": {
+    "minimumDwellGenerations": 24,
+    "maximumDwellGenerations": 96,
+    "transitionGenerations": 6,
+    "stateBias": 0.12
+  },
+  "paintings": [
+    {
+      "id": "monet-water-lilies-1906",
+      "title": "Water Lilies",
+      "artist": "Claude Monet",
+      "date": "1906",
+      "resourceFilename": "monet-water-lilies.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/16568/water-lilies",
+      "tags": ["water", "calm", "floral", "luminous"],
+      "defaultState": {"brightness": 0.58, "warmth": 0.52, "abstraction": 0.28, "motion": 0.22, "tension": 0.18},
+      "visualBias": {"palette": "cool green, pearl, and violet", "brush": "soft floating strokes", "structure": "diffuse pond reflections"},
+      "promptBias": ["water lilies", "pond reflections", "luminous aquatic atmosphere"]
+    },
+    {
+      "id": "renoir-two-sisters-1881",
+      "title": "Two Sisters (On the Terrace)",
+      "artist": "Pierre-Auguste Renoir",
+      "date": "1881",
+      "resourceFilename": "renoir-two-sisters.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/14655/two-sisters-on-the-terrace",
+      "tags": ["figures", "terrace", "flowers", "radiant"],
+      "defaultState": {"brightness": 0.66, "warmth": 0.68, "abstraction": 0.24, "motion": 0.30, "tension": 0.20},
+      "visualBias": {"palette": "warm rose, cobalt, and garden green", "brush": "rounded flickering strokes", "structure": "figures held within a flowering terrace"},
+      "promptBias": ["sunlit figures", "flowering riverside terrace", "warm social radiance"]
+    },
+    {
+      "id": "monet-water-lily-pond-1900",
+      "title": "Water Lily Pond",
+      "artist": "Claude Monet",
+      "date": "1900",
+      "resourceFilename": "monet-water-lily-pond.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/87088/water-lily-pond",
+      "tags": ["water", "garden", "bridge", "green"],
+      "defaultState": {"brightness": 0.50, "warmth": 0.44, "abstraction": 0.32, "motion": 0.26, "tension": 0.16},
+      "visualBias": {"palette": "deep green, blue, and lavender", "brush": "interlaced garden strokes", "structure": "arched bridge over layered water"},
+      "promptBias": ["Japanese footbridge", "enclosed garden pond", "layered green reflections"]
+    },
+    {
+      "id": "pissarro-place-du-havre-1893",
+      "title": "The Place du Havre, Paris",
+      "artist": "Camille Pissarro",
+      "date": "1893",
+      "resourceFilename": "pissarro-place-du-havre.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/81551/the-place-du-havre-paris",
+      "tags": ["city", "boulevard", "crowd", "weather"],
+      "defaultState": {"brightness": 0.48, "warmth": 0.46, "abstraction": 0.30, "motion": 0.54, "tension": 0.34},
+      "visualBias": {"palette": "silvery gray, ochre, and muted blue", "brush": "small broken urban marks", "structure": "deep boulevard and moving crowd"},
+      "promptBias": ["Paris boulevard", "moving carriages and pedestrians", "atmospheric city weather"]
+    },
+    {
+      "id": "monet-stacks-of-wheat-1890",
+      "title": "Stacks of Wheat (End of Summer)",
+      "artist": "Claude Monet",
+      "date": "1890-91",
+      "resourceFilename": "monet-stacks-of-wheat.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/64818/stacks-of-wheat-end-of-summer",
+      "tags": ["field", "harvest", "sunset", "rural"],
+      "defaultState": {"brightness": 0.62, "warmth": 0.76, "abstraction": 0.30, "motion": 0.18, "tension": 0.20},
+      "visualBias": {"palette": "gold, coral, and violet shadow", "brush": "dense directional strokes", "structure": "monumental haystacks in open fields"},
+      "promptBias": ["harvest field", "late summer light", "radiant stacks of wheat"]
+    },
+    {
+      "id": "sisley-watering-place-1875",
+      "title": "Watering Place at Marly",
+      "artist": "Alfred Sisley",
+      "date": "1875",
+      "resourceFilename": "sisley-watering-place.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/37741/watering-place-at-marly",
+      "tags": ["river", "village", "sky", "tranquil"],
+      "defaultState": {"brightness": 0.60, "warmth": 0.48, "abstraction": 0.22, "motion": 0.28, "tension": 0.14},
+      "visualBias": {"palette": "clear blue, soft earth, and fresh green", "brush": "open-air broken strokes", "structure": "low village horizon beneath expansive sky"},
+      "promptBias": ["waterside village", "expansive changing sky", "clear plein-air atmosphere"]
+    },
+    {
+      "id": "monet-beach-at-sainte-adresse-1867",
+      "title": "The Beach at Sainte-Adresse",
+      "artist": "Claude Monet",
+      "date": "1867",
+      "resourceFilename": "monet-beach-at-sainte-adresse.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/14598/the-beach-at-sainte-adresse",
+      "tags": ["sea", "beach", "boats", "wind"],
+      "defaultState": {"brightness": 0.64, "warmth": 0.50, "abstraction": 0.24, "motion": 0.44, "tension": 0.24},
+      "visualBias": {"palette": "marine blue, cream, and sunlit ochre", "brush": "brisk coastal strokes", "structure": "figures and boats across a broad shoreline"},
+      "promptBias": ["windy Channel coast", "sailboats and shoreline figures", "bright maritime air"]
+    },
+    {
+      "id": "morisot-woman-at-her-toilette-1875",
+      "title": "Woman at Her Toilette",
+      "artist": "Berthe Morisot",
+      "date": "1875-80",
+      "resourceFilename": "morisot-woman-at-her-toilette.png",
+      "sourceInstitution": "Art Institute of Chicago",
+      "sourceURL": "https://www.artic.edu/artworks/11723/woman-at-her-toilette",
+      "tags": ["figure", "interior", "intimate", "feathery"],
+      "defaultState": {"brightness": 0.62, "warmth": 0.58, "abstraction": 0.34, "motion": 0.34, "tension": 0.22},
+      "visualBias": {"palette": "lavender, pink, blue, and pearl white", "brush": "light feathery strokes", "structure": "intimate figure dissolved into reflective interior"},
+      "promptBias": ["intimate modern figure", "powdery reflective interior", "feathery luminous paint"]
+    }
+  ]
+}

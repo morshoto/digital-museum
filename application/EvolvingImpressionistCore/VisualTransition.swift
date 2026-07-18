@@ -10,16 +10,16 @@ public struct VisualTransitionConfiguration: Equatable, Sendable {
 
     public init(
         duration: TimeInterval = 1.2,
-        minimumScale: Double = 1.004,
-        maximumScale: Double = 1.005,
-        minimumOffsetAmplitude: Double = 0.35,
-        maximumOffsetAmplitude: Double = 2
+        minimumScale: Double = 1,
+        maximumScale: Double = 1.002,
+        minimumOffsetAmplitude: Double = 0,
+        maximumOffsetAmplitude: Double = 1
     ) {
         self.duration = max(0.001, duration)
-        self.minimumScale = min(1.005, max(1, minimumScale))
-        self.maximumScale = min(1.005, max(self.minimumScale, maximumScale))
-        self.minimumOffsetAmplitude = min(2, max(0, minimumOffsetAmplitude))
-        self.maximumOffsetAmplitude = min(2, max(self.minimumOffsetAmplitude, maximumOffsetAmplitude))
+        self.minimumScale = min(1.002, max(1, minimumScale))
+        self.maximumScale = min(1.002, max(self.minimumScale, maximumScale))
+        self.minimumOffsetAmplitude = min(1, max(0, minimumOffsetAmplitude))
+        self.maximumOffsetAmplitude = min(1, max(self.minimumOffsetAmplitude, maximumOffsetAmplitude))
     }
 
     public static let installation = VisualTransitionConfiguration()
@@ -136,11 +136,7 @@ public struct VisualTransitionTimeline {
     ) -> VisualPresentationTransform {
         let motion = min(1, max(0, worldState.motion))
         let tension = min(1, max(0, worldState.tension))
-        let scaleCeiling = interpolate(
-            min(configuration.maximumScale, configuration.minimumScale + 0.003),
-            configuration.maximumScale,
-            motion
-        )
+        let scaleCeiling = interpolate(configuration.minimumScale, configuration.maximumScale, motion)
         let offsetAmplitude = interpolate(configuration.minimumOffsetAmplitude, configuration.maximumOffsetAmplitude, motion)
 
         // A slow orbit guarantees continuous direction changes without jitter.

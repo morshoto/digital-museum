@@ -3,6 +3,9 @@
 - Status: Accepted
 - Date: 2026-07-18
 
+This decision is extended by [ADR 0002](0002-impressionist-painting-worlds.md),
+which adds long-period reference worlds and further reduces presentation motion.
+
 ## Context
 
 Long Diffusion intervals made Swift opacity, scale, and position changes carry
@@ -30,8 +33,8 @@ valid display and feedback reference unchanged.
 Per-generation strength is reduced and capped at `0.42`. The existing
 continuous original anchor and output re-anchor remain, while the 10% periodic
 pullback moves from every 5 generations to every 18 generations. Swift blends
-frames for 1.2 seconds and limits auxiliary movement to `1.00...1.005` scale and
-two points of translation.
+frames for 1.2 seconds. ADR 0002 subsequently narrows auxiliary movement from
+this decision's initial `1.00...1.005` scale and two-point translation limits.
 
 The public HTTP request and response, `WorldState` transport, and audio paths do
 not change.

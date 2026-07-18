@@ -5,6 +5,14 @@ as the compatibility and transport contract. Visuals and music derive the same
 five higher-level qualities locally. No derived field adds an OSC path, changes
 the visual HTTP request, or introduces independent randomness.
 
+Phase D keeps that transport unchanged. The visual service blends 12% of the
+active painting profile's `defaultState` into its private Diffusion controls,
+with a hard 20% implementation ceiling. This makes the same WorldState read
+differently in a calm water scene, city boulevard, or figure study without
+modifying the values sent to OSC and TidalCycles. During a painting-world
+bridge, profile defaults and prompt language interpolate with the same
+deterministic anchor progress.
+
 `abstraction` retains one privileged visual responsibility: it is the hard
 limit on how far Diffusion may depart from the source painting. The derived
 qualities determine how change appears inside that allowance:
