@@ -54,6 +54,31 @@ class DiffusionMappingTests(unittest.TestCase):
         self.assertGreater(active.strength, calm.strength)
         self.assertGreaterEqual(calm.num_inference_steps * calm.strength, 1)
 
+    def test_abstraction_caps_divergence_despite_high_motion_and_tension(self):
+        constrained = diffusion_settings(
+            dict(VALID_STATE, abstraction=0, motion=1, tension=1),
+            0,
+            turbo=True,
+        )
+        self.assertLessEqual(constrained.strength, .30)
+        self.assertGreaterEqual(constrained.original_weight, .55)
+
+    def test_artistic_qualities_shape_change_inside_abstraction_allowance(self):
+        quiet = diffusion_settings(
+            dict(VALID_STATE, abstraction=.6, motion=0, tension=0),
+            0,
+            turbo=True,
+        )
+        active = diffusion_settings(
+            dict(VALID_STATE, abstraction=.6, motion=1, tension=1),
+            0,
+            turbo=True,
+        )
+        abstraction_cap = .30 + .6 * .48
+        self.assertGreater(active.strength, quiet.strength)
+        self.assertLessEqual(active.strength, abstraction_cap)
+        self.assertLessEqual(quiet.strength, abstraction_cap)
+
     def test_turbo_uses_no_classifier_free_guidance(self):
         low = diffusion_settings(dict(VALID_STATE, tension=0), 0, turbo=True)
         high = diffusion_settings(dict(VALID_STATE, tension=1), 0, turbo=True)
@@ -64,7 +89,7 @@ class DiffusionMappingTests(unittest.TestCase):
         settings = diffusion_settings(dict(VALID_STATE, abstraction=1), 0, turbo=True)
         self.assertGreaterEqual(settings.original_weight, .30)
 
-    def test_instability_raises_non_turbo_guidance_and_lowers_original_anchor(self):
+    def test_instability_raises_non_turbo_guidance_without_breaking_anchor_constraint(self):
         calm = diffusion_settings(dict(VALID_STATE, abstraction=0, motion=0, tension=0), 0, turbo=False)
         unstable = diffusion_settings(dict(VALID_STATE, abstraction=1, motion=1, tension=1), 0, turbo=False)
         self.assertGreater(unstable.guidance_scale, calm.guidance_scale)

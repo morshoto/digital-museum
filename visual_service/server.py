@@ -150,12 +150,20 @@ class DiffusionSettings:
 def diffusion_settings(state: dict[str, float], sequence: int, turbo: bool) -> DiffusionSettings:
     """Map normalized world state to bounded, model-safe diffusion controls."""
     artistic = artistic_state(state)
-    strength = min(0.78, 0.25 + artistic.fluidity * 0.32 + artistic.instability * 0.18)
+    # Abstraction remains the hard limit on divergence from the source image.
+    # Artistic qualities describe how the image changes inside that allowance.
+    base_strength = 0.25 + state["abstraction"] * 0.40
+    artistic_modifier = artistic.fluidity * 0.08 + artistic.instability * 0.05
+    max_strength_for_abstraction = 0.30 + state["abstraction"] * 0.48
+    strength = min(max_strength_for_abstraction, base_strength + artistic_modifier)
     steps = 4 if turbo else max(12, round(16 + artistic.fluidity * 8 + artistic.density * 4))
     # SD-Turbo is explicitly trained without classifier-free guidance.
     guidance = 0.0 if turbo else 3.5 + artistic.instability * 3.0
-    # Every iterative source retains at least 30% of the original painting.
-    original_weight = 0.30 + artistic.serenity * 0.25
+    # Motion or tension may strengthen the anchor through serenity, but can
+    # never weaken the abstraction-defined minimum source preservation.
+    abstraction_anchor = 0.55 - state["abstraction"] * 0.25
+    serenity_anchor = 0.30 + artistic.serenity * 0.25
+    original_weight = max(abstraction_anchor, serenity_anchor)
     state_key = ":".join(f"{state[key]:.4f}" for key in PARAMETERS)
     seed_key = f"{state_key}:{sequence}:{round(state['motion'] * 1000)}"
     seed = int(hashlib.sha256(seed_key.encode()).hexdigest()[:8], 16)
