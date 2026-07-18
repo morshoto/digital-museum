@@ -5,6 +5,15 @@ as the compatibility and transport contract. Visuals and music derive the same
 five higher-level qualities locally. No derived field adds an OSC path, changes
 the visual HTTP request, or introduces independent randomness.
 
+`abstraction` retains one privileged visual responsibility: it is the hard
+limit on how far Diffusion may depart from the source painting. The derived
+qualities determine how change appears inside that allowance:
+
+```text
+abstraction -> allowed visual divergence
+fluidity / instability / serenity / density -> character of that divergence
+```
+
 ## Current mapping audit
 
 Before this phase, the visual service mapped `brightness` to source exposure
@@ -41,8 +50,11 @@ density     = 0.60m + 0.25a + 0.15t
 
 Every expression is a convex combination (or one minus one), so normalized
 inputs always produce values in `0...1`. The same input always produces the
-same output. Swift exposes the canonical `ArtisticState`; Python and Tidal use
-the same equations at their existing consumer boundaries.
+same output. Swift, Python, and Tidal implement the equations at their existing
+consumer boundaries. All three are checked against
+[`../verification/artistic_state_vectors.json`](../verification/artistic_state_vectors.json)
+so a unilateral formula edit fails verification instead of silently separating
+the media.
 
 ## Visual mapping
 
@@ -58,6 +70,23 @@ Raw `warmth` still controls precise red/blue temperature, and all five raw
 values remain in the unchanged request. Sequence remains part of Diffusion's
 seed so successive frames can evolve; artistic variation is still conditioned
 on the deterministic shared state.
+
+Diffusion strength and source anchoring apply the following additional
+constraints:
+
+```text
+base_strength = 0.25 + 0.40 * abstraction
+modifier = 0.08 * fluidity + 0.05 * instability
+strength_cap = 0.30 + 0.48 * abstraction
+strength = min(strength_cap, base_strength + modifier)
+
+abstraction_anchor = 0.55 - 0.25 * abstraction
+serenity_anchor = 0.30 + 0.25 * serenity
+original_weight = max(abstraction_anchor, serenity_anchor)
+```
+
+Consequently, `abstraction = 0` caps strength at `0.30` and retains at least
+55% of the original even when motion and tension are both maximal.
 
 ## Music mapping
 

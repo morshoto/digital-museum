@@ -6,16 +6,17 @@ and the Mac mini speaker output selected at 48 kHz.
 
 ## Automated regression
 
-`./scripts/verify.sh` passed 23 Python tests in the dependency-free environment
+`./scripts/verify.sh` passed 26 Python tests in the dependency-free environment
 (three Pillow-only backend tests skipped), all Swift build and executable
 checks, two mock visual generations and failure recovery, all five original
 OSC addresses through a local UDP receiver, both Tidal patterns evaluated in
 the pinned GHCi environment, and all five paths through the real SuperCollider
 bridge. The Swift verifier explicitly checked deterministic derived state,
-`0...1` bounds, and expected directional effects. Python checked the same
-properties plus visual consumption and distinct outputs for A/B/C. The Tidal
-source verifier checks that all five derived qualities are used after their
-definitions before evaluating both patterns.
+`0...1` bounds, expected directional effects, and six shared golden vectors.
+Python checked the same vectors plus visual consumption, abstraction divergence
+limits, and distinct outputs for A/B/C. The Tidal source verifier evaluates the
+same six vectors through the pure functions used by its patterns and checks
+that all five derived qualities connect to their intended pattern controls.
 
 ## Live audiovisual calibration states
 
@@ -44,6 +45,12 @@ SuperCollider recorded `/tmp/evolving-phase-c.wav`: stereo Float32, 48 kHz,
 61.1307 seconds, 22 MiB. `ffmpeg astats` found finite nonzero signal on the
 recording, overall peak -34.55 dBFS and RMS -61.44 dBFS, with zero NaNs,
 infinities, or denormals.
+
+Those levels prove signal-path integrity, not exhibition loudness. In
+particular, `-61.44 dBFS` RMS may be effectively inaudible in a gallery. Phase C
+does not add a master-gain or limiter stage; curatorial tuning must validate
+ambient, normal, and tense loudness through the actual room speakers without
+allowing state changes to create excessive level jumps.
 
 ## Exact live commands
 
@@ -93,3 +100,9 @@ held phase, then judge the continuous transition in the room. Do not evaluate
 - Four-second calibration holds prove response and contrast, not final gallery
   pacing. The 45-second visual cadence and mix ranges still require long-form
   curatorial tuning on the actual display and speakers.
+- The independent-motion event-ratio gate is intentionally `1.7`, down from the
+  pre-derived `2.5` mapping. It proves a material event-rate response but does
+  not prove that high motion sounds sufficiently dynamic to listeners.
+- Future audio tuning should place an explicitly calibrated master gain and
+  limiter after the generative mix, then compare integrated loudness and peaks
+  for the A/B/C anchors on the installation speakers.

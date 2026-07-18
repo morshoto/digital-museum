@@ -82,15 +82,19 @@ artistic state documented in [`../docs/SHARED_ARTISTIC_STATE.md`](../docs/SHARED
 Raw `warmth` retains red/blue source color-temperature scaling and palette
 language. The generation sequence still changes the deterministic seed so
 successive frames evolve without adding an independent artistic-state input.
+Abstraction remains a hard divergence constraint: strength is capped by
+`0.30 + 0.48 × abstraction`, and the original-image contribution cannot fall
+below `0.55 - 0.25 × abstraction`. Fluidity and instability shape deformation
+only inside that allowance.
 
 For SD-Turbo, classifier-free guidance is correctly disabled. Four steps and a
 minimum strength of 0.25 satisfy the model's Img2Img requirement that
 `steps × strength >= 1`.
 
 Each sequential source is a blend of the previous generated image and the
-original painting. The original weight ranges from 55% at maximum serenity to
-30% at minimum serenity, so iterative generations cannot silently lose the
-anchor. Luminosity, temperature, and instability-driven contrast adjustments
+original painting. The original weight is the greater of the abstraction-based
+minimum and the serenity-based anchor, and therefore always remains within
+30–55%. Luminosity, temperature, and instability-driven contrast adjustments
 are applied after the blend. A backend lock prevents concurrent access to the
 non-thread-safe MPS pipeline.
 

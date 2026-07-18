@@ -91,7 +91,9 @@ The backend derives luminosity, fluidity, instability, serenity, and density
 from the five raw values. Those qualities jointly drive exposure, Img2Img
 strength, contrast/guidance, original anchoring, texture, and prompt language;
 raw warmth retains precise color-temperature control. Swift remains coupled
-only to the unchanged HTTP contract. See
+only to the unchanged HTTP contract. Raw abstraction remains the hard upper
+bound on visual divergence, while the artistic qualities determine how change
+appears within that bound. See
 [`docs/SHARED_ARTISTIC_STATE.md`](docs/SHARED_ARTISTIC_STATE.md) for the audit,
 equations, mapping tables, response timing, and calibration states, and
 [`visual_service/README.md`](visual_service/README.md) for backend setup.
