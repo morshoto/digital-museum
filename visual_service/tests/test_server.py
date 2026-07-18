@@ -62,12 +62,14 @@ class VisualServiceTests(unittest.TestCase):
         self.assertTrue(image.startswith(b"<svg"))
         self.assertEqual(body["mediaType"], "image/svg+xml")
         self.assertEqual(body["backend"], "mock")
+        self.assertEqual(body["referenceUsage"], {"originalImage": False, "previousImage": False})
 
     def test_previous_generation_is_accepted(self):
         _, first = self.request("/generate", {"state": VALID_STATE, "reference": {"originalImagePath": None, "previousGenerationID": None}})
         changed = dict(VALID_STATE, abstraction=.8)
         _, second = self.request("/generate", {"state": changed, "reference": {"originalImagePath": None, "previousGenerationID": first["generationID"]}})
         self.assertNotEqual(first["imageBase64"], second["imageBase64"])
+        self.assertEqual(second["referenceUsage"], {"originalImage": False, "previousImage": True})
 
     def test_out_of_range_parameter_returns_400(self):
         invalid = dict(VALID_STATE, warmth=1.2)
