@@ -50,6 +50,7 @@ struct VerificationRunner {
     static func main() async {
         do {
             try verifyParameters()
+            try verifyArtisticState()
             try await verifyOSC()
             try await verifyOSCWithoutReceiver()
             try await verifyVisualIntegration()
@@ -128,6 +129,36 @@ struct VerificationRunner {
         engine.configurations[.brightness] = edited
         try require(abs(engine.sample(at: sampleTime).brightness - beforeConfigurationEdit) > 0.000001, "live modulation controls did not affect sampling")
         print("PASS: all five live parameters, modulation controls, bounded overrides, and return to automatic modulation")
+    }
+
+    private static func verifyArtisticState() throws {
+        let samples = [
+            WorldState(brightness: 0, warmth: 0, abstraction: 0, motion: 0, tension: 0),
+            WorldState(),
+            WorldState(brightness: 1, warmth: 1, abstraction: 1, motion: 1, tension: 1),
+            WorldState(brightness: 0.82, warmth: 0.74, abstraction: 0.48, motion: 0.67, tension: 0.31),
+        ]
+        for world in samples {
+            let first = world.artistic
+            let second = world.artistic
+            try require(first == second, "identical WorldState produced different artistic state")
+            for (name, value) in [
+                ("luminosity", first.luminosity), ("fluidity", first.fluidity),
+                ("instability", first.instability), ("serenity", first.serenity),
+                ("density", first.density),
+            ] {
+                try require((0...1).contains(value), "derived \(name) escaped 0...1")
+            }
+        }
+
+        let baseline = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 0.5, motion: 0.5, tension: 0.5)
+        try require(WorldState(brightness: 1, warmth: 0.5, abstraction: 0.5, motion: 0.5, tension: 0.5).artistic.luminosity > baseline.artistic.luminosity, "brightness did not raise luminosity")
+        try require(WorldState(brightness: 0.5, warmth: 0.5, abstraction: 0.5, motion: 1, tension: 0.5).artistic.fluidity > baseline.artistic.fluidity, "motion did not raise fluidity")
+        let tense = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 0.5, motion: 0.5, tension: 1).artistic
+        try require(tense.instability > baseline.artistic.instability && tense.serenity < baseline.artistic.serenity, "tension did not raise instability and lower serenity")
+        let abstract = WorldState(brightness: 0.5, warmth: 0.5, abstraction: 1, motion: 0.5, tension: 0.5).artistic
+        try require(abstract.fluidity > baseline.artistic.fluidity && abstract.instability > baseline.artistic.instability && abstract.density > baseline.artistic.density, "abstraction did not affect its intended qualities")
+        print("PASS: deterministic bounded artistic state and expected raw-to-derived relationships")
     }
 
     private static func requireValue<T>(_ value: T?, _ message: String) throws -> T {

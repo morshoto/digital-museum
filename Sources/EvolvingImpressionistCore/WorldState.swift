@@ -49,6 +49,31 @@ public struct WorldState: Codable, Equatable, Sendable {
     }
 }
 
+/// Higher-level qualities shared by the visual and musical mappings.
+///
+/// These values are derived only from `WorldState`: they add no transport
+/// fields or independent randomness, and every component remains in `0...1`
+/// when the raw inputs are normalized.
+public struct ArtisticState: Codable, Equatable, Sendable {
+    public let luminosity: Double
+    public let fluidity: Double
+    public let instability: Double
+    public let serenity: Double
+    public let density: Double
+
+    public init(world: WorldState) {
+        luminosity = 0.70 * world.brightness + 0.30 * world.warmth
+        fluidity = 0.65 * world.motion + 0.35 * world.abstraction
+        instability = 0.65 * world.tension + 0.35 * world.abstraction
+        serenity = 1 - (0.55 * world.tension + 0.25 * world.motion + 0.20 * world.abstraction)
+        density = 0.60 * world.motion + 0.25 * world.abstraction + 0.15 * world.tension
+    }
+}
+
+public extension WorldState {
+    var artistic: ArtisticState { ArtisticState(world: self) }
+}
+
 public struct SineComponent: Codable, Equatable, Sendable {
     public var amplitude: Double
     public var period: Double

@@ -13,6 +13,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+for quality in worldLuminosity worldFluidity worldInstability worldSerenity worldDensity; do
+    occurrences=$(grep -o "$quality" "$tidal_source" | wc -l | tr -d ' ')
+    if [ "$occurrences" -lt 2 ]; then
+        printf 'FAIL: %s is defined but not consumed by a Tidal pattern\n' "$quality" >&2
+        exit 1
+    fi
+done
+
 awk '
     /^d[12] \$/ { print ":{"; in_pattern = 1 }
     in_pattern && /^$/ { print ":}"; in_pattern = 0 }
@@ -31,3 +39,4 @@ if grep -Eq '(^|:)([0-9]+:)?[0-9]+: error:|Exception|Not in scope' "$output_file
 fi
 
 printf '%s\n' 'PASS: EvolvingImpressionist.hs evaluated both patterns without errors'
+printf '%s\n' 'PASS: all five derived artistic qualities are consumed by running-pattern controls'

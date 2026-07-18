@@ -40,6 +40,27 @@ class GenerationResult:
     prompt: str
 
 
+@dataclass(frozen=True)
+class ArtisticState:
+    """Deterministic shared artistic qualities, each bounded to 0...1."""
+
+    luminosity: float
+    fluidity: float
+    instability: float
+    serenity: float
+    density: float
+
+
+def artistic_state(state: dict[str, float]) -> ArtisticState:
+    return ArtisticState(
+        luminosity=.70 * state["brightness"] + .30 * state["warmth"],
+        fluidity=.65 * state["motion"] + .35 * state["abstraction"],
+        instability=.65 * state["tension"] + .35 * state["abstraction"],
+        serenity=1 - (.55 * state["tension"] + .25 * state["motion"] + .20 * state["abstraction"]),
+        density=.60 * state["motion"] + .25 * state["abstraction"] + .15 * state["tension"],
+    )
+
+
 class VisualBackend(Protocol):
     name: str
 
@@ -74,11 +95,14 @@ def parse_request(payload: object) -> tuple[dict[str, float], str | None, str | 
 
 
 def prompt_for(state: dict[str, float]) -> str:
-    light = "soft moonlit" if state["brightness"] < .35 else "luminous golden" if state["brightness"] > .65 else "diffused daylight"
+    artistic = artistic_state(state)
+    light = "subdued moonlit" if artistic.luminosity < .35 else "radiant luminous" if artistic.luminosity > .65 else "diffused daylight"
     temperature = "cool blue-green" if state["warmth"] < .4 else "amber and rose" if state["warmth"] > .65 else "pearl and lavender"
-    gesture = "restless sweeping" if state["motion"] > .65 else "slow visible" if state["motion"] > .35 else "quiet delicate"
-    mood = "unsettled high-contrast" if state["tension"] > .65 else "serene balanced" if state["tension"] < .35 else "expectant"
-    return f"{light} {temperature} impressionist painting, {gesture} brush strokes, {mood} atmosphere, abstraction {state['abstraction']:.2f}, preserve the original composition, no hard scene cut"
+    gesture = "turbulent flowing" if artistic.fluidity > .65 else "slowly flowing" if artistic.fluidity > .35 else "quiet delicate"
+    mood = "structurally unsettled, high-contrast" if artistic.instability > .65 else "serene and balanced" if artistic.serenity > .65 else "gently expectant"
+    texture = "layered dense brushwork" if artistic.density > .65 else "spacious brushwork" if artistic.density < .35 else "varied painterly texture"
+    preservation = "strongly preserve the original composition" if artistic.serenity > .65 else "loosely preserve the original composition"
+    return f"{light} {temperature} impressionist painting, {gesture} brush strokes, {texture}, {mood} atmosphere, {preservation}, no hard scene cut"
 
 
 class MockBackend:
@@ -88,25 +112,26 @@ class MockBackend:
         return {"ok": True, "backend": self.name}
 
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
+        artistic = artistic_state(state)
         reference_digest = hashlib.sha256((original or b"original") + (previous or b"previous")).hexdigest()
         seed_material = json.dumps(state, sort_keys=True) + reference_digest
         rng = random.Random(int(hashlib.sha256(seed_material.encode()).hexdigest()[:12], 16))
         width, height = 1600, 1000
-        light = int(40 + 52 * state["brightness"])
+        light = int(40 + 52 * artistic.luminosity)
         warmth = int(150 * state["warmth"])
         blue = int(180 - 110 * state["warmth"])
-        contrast = 0.55 + state["tension"] * .5
+        contrast = 0.55 + artistic.instability * .5
         strokes = []
-        count = int(55 + state["abstraction"] * 100)
+        count = int(55 + artistic.density * 100)
         for _ in range(count):
             x, y = rng.uniform(-.05, 1.05) * width, rng.uniform(-.08, 1.08) * height
-            radius = rng.uniform(25, 130) * (.75 + state["motion"])
+            radius = rng.uniform(25, 130) * (.75 + artistic.fluidity)
             alpha = rng.uniform(.08, .25) * contrast
             hue = rng.randint(-20, 20)
             color = f"rgb({max(0,min(255, light + warmth//2 + hue))},{max(0,min(255, light + warmth//3 + hue))},{max(0,min(255, blue + light//3))})"
             strokes.append(f'<ellipse cx="{x:.1f}" cy="{y:.1f}" rx="{radius:.1f}" ry="{radius*rng.uniform(.35,.9):.1f}" fill="{color}" opacity="{alpha:.3f}" transform="rotate({rng.uniform(-35,35):.1f} {x:.1f} {y:.1f})"/>')
         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-<defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="rgb({light+warmth//2},{light+warmth//3},{blue})"/><stop offset="1" stop-color="rgb({max(10,light//3)},{max(15,light//4)},{max(30,blue//2)})"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="{3+state['abstraction']*8:.1f}"/></filter></defs>
+<defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="rgb({light+warmth//2},{light+warmth//3},{blue})"/><stop offset="1" stop-color="rgb({max(10,light//3)},{max(15,light//4)},{max(30,blue//2)})"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="{3+artistic.fluidity*8:.1f}"/></filter></defs>
 <rect width="100%" height="100%" fill="url(#sky)"/><g filter="url(#blur)">{''.join(strokes)}</g>
 <path d="M0 {height*.72:.0f} Q{width*.25:.0f} {height*.58:.0f} {width*.5:.0f} {height*.72:.0f} T{width} {height*.65:.0f} V{height} H0Z" fill="rgb({30+warmth//3},{40+warmth//4},{80+blue//3})" opacity=".48"/>
 </svg>'''.encode()
@@ -124,12 +149,13 @@ class DiffusionSettings:
 
 def diffusion_settings(state: dict[str, float], sequence: int, turbo: bool) -> DiffusionSettings:
     """Map normalized world state to bounded, model-safe diffusion controls."""
-    strength = min(0.78, 0.25 + state["abstraction"] * 0.42 + state["motion"] * 0.10)
-    steps = 4 if turbo else max(12, round(16 + state["abstraction"] * 8 + state["motion"] * 4))
+    artistic = artistic_state(state)
+    strength = min(0.78, 0.25 + artistic.fluidity * 0.32 + artistic.instability * 0.18)
+    steps = 4 if turbo else max(12, round(16 + artistic.fluidity * 8 + artistic.density * 4))
     # SD-Turbo is explicitly trained without classifier-free guidance.
-    guidance = 0.0 if turbo else 3.5 + state["tension"] * 3.0
+    guidance = 0.0 if turbo else 3.5 + artistic.instability * 3.0
     # Every iterative source retains at least 30% of the original painting.
-    original_weight = 0.55 - state["abstraction"] * 0.25
+    original_weight = 0.30 + artistic.serenity * 0.25
     state_key = ":".join(f"{state[key]:.4f}" for key in PARAMETERS)
     seed_key = f"{state_key}:{sequence}:{round(state['motion'] * 1000)}"
     seed = int(hashlib.sha256(seed_key.encode()).hexdigest()[:8], 16)
@@ -231,15 +257,16 @@ class DiffusersBackend:
         previous_image = ImageOps.fit(previous_image, size, method=Image.Resampling.LANCZOS)
         source = Image.blend(previous_image, original_image, settings.original_weight)
 
-        # Brightness controls exposure; warmth scales red/blue color temperature.
-        source = ImageEnhance.Brightness(source).enhance(0.75 + state["brightness"] * 0.55)
+        artistic = artistic_state(state)
+        # Shared luminosity controls exposure; raw warmth retains precise color temperature.
+        source = ImageEnhance.Brightness(source).enhance(0.75 + artistic.luminosity * 0.55)
         red, green, blue = source.split()
         warmth = state["warmth"] - 0.5
         red = red.point(lambda value: max(0, min(255, value * (1.0 + warmth * 0.30))))
         blue = blue.point(lambda value: max(0, min(255, value * (1.0 - warmth * 0.30))))
         source = Image.merge("RGB", (red, green, blue))
-        # Tension controls local contrast in addition to prompt instability/guidance.
-        return ImageEnhance.Contrast(source).enhance(0.80 + state["tension"] * 0.65)
+        # Shared instability controls local contrast and non-turbo guidance.
+        return ImageEnhance.Contrast(source).enhance(0.80 + artistic.instability * 0.65)
 
     def generate(self, state: dict[str, float], original: bytes | None, previous: bytes | None) -> GenerationResult:
         with self._lock:

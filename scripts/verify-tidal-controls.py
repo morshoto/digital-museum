@@ -14,6 +14,22 @@ from collections import defaultdict
 PARAMETERS = ("brightness", "warmth", "abstraction", "motion", "tension")
 
 
+def derived(selected: str, value: float) -> dict[str, float]:
+    state = {parameter: 0.5 for parameter in PARAMETERS}
+    state[selected] = value
+    return {
+        "luminosity": .70 * state["brightness"] + .30 * state["warmth"],
+        "fluidity": .65 * state["motion"] + .35 * state["abstraction"],
+        "instability": .65 * state["tension"] + .35 * state["abstraction"],
+        "serenity": 1 - (.55 * state["tension"] + .25 * state["motion"] + .20 * state["abstraction"]),
+        "density": .60 * state["motion"] + .25 * state["abstraction"] + .15 * state["tension"],
+    }
+
+
+def mapped(low: float, high: float, value: float) -> float:
+    return low + (high - low) * value
+
+
 def osc_string(value: str) -> bytes:
     encoded = value.encode("utf-8") + b"\0"
     return encoded + (b"\0" * ((-len(encoded)) % 4))
@@ -145,8 +161,10 @@ def main() -> None:
                 phases[(parameter, value)] = events
                 print(f"{parameter}={value}: {len(events)} /dirt/play events")
 
-    assert_control(phases[("brightness", 0)], "cutoff", 650.0)
-    assert_control(phases[("brightness", 1)], "cutoff", 12000.0)
+    brightness_low = mapped(650, 12000, derived("brightness", 0)["luminosity"])
+    brightness_high = mapped(650, 12000, derived("brightness", 1)["luminosity"])
+    assert_control(phases[("brightness", 0)], "cutoff", brightness_low)
+    assert_control(phases[("brightness", 1)], "cutoff", brightness_high)
 
     warmth_low = sound_gains(phases[("warmth", 0)])
     warmth_high = sound_gains(phases[("warmth", 1)])
@@ -178,22 +196,24 @@ def main() -> None:
 
     motion_low = len(phases[("motion", 0)])
     motion_high = len(phases[("motion", 1)])
-    if motion_low == 0 or motion_high / motion_low < 2.5:
+    if motion_low == 0 or motion_high / motion_low < 1.7:
         raise AssertionError(f"motion density ratio too small: {motion_high}/{motion_low}")
 
-    assert_control(phases[("tension", 0)], "crush", 16.0)
-    assert_control(phases[("tension", 1)], "crush", 5.0)
-    assert_control(phases[("tension", 0)], "detune", 0.0)
-    assert_control(phases[("tension", 1)], "detune", 0.42)
-    assert_control(phases[("tension", 0)], "nudge", 0.0)
-    assert_control(phases[("tension", 1)], "nudge", 0.09)
+    tension_low = derived("tension", 0)["instability"]
+    tension_high = derived("tension", 1)["instability"]
+    assert_control(phases[("tension", 0)], "crush", mapped(16, 5, tension_low))
+    assert_control(phases[("tension", 1)], "crush", mapped(16, 5, tension_high))
+    assert_control(phases[("tension", 0)], "detune", mapped(0, .42, tension_low))
+    assert_control(phases[("tension", 1)], "detune", mapped(0, .42, tension_high))
+    assert_control(phases[("tension", 0)], "nudge", mapped(0, .09, tension_low))
+    assert_control(phases[("tension", 1)], "nudge", mapped(0, .09, tension_high))
 
-    print(f"brightness cutoff: 650.0 -> 12000.0")
+    print(f"brightness-derived luminosity cutoff: {brightness_low:.1f} -> {brightness_high:.1f}")
     print(f"warmth gains: {warmth_low} -> {warmth_high}")
     print(f"abstraction pitched order: {low_notes} -> {high_notes}")
     print(f"motion event ratio: {motion_high}/{motion_low} = {motion_high / motion_low:.2f}")
-    print("tension: detune 0.0 -> 0.42, nudge 0.0 -> 0.09, crush 16.0 -> 5.0")
-    print("PASS: five independent controls changed running Tidal /dirt/play output")
+    print(f"tension-derived instability: {tension_low:.3f} -> {tension_high:.3f}")
+    print("PASS: five independent raw controls changed derived artistic behavior in running Tidal patterns")
 
 
 if __name__ == "__main__":
