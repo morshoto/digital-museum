@@ -16,7 +16,7 @@ service_pid=$!
 trap 'kill "$service_pid" 2>/dev/null || true' EXIT INT TERM
 
 attempt=0
-until curl -fsS "http://127.0.0.1:$service_port/health" >/dev/null; do
+until curl -fsS "http://127.0.0.1:$service_port/health" >/dev/null 2>&1; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 50 ]; then
         printf 'Visual service failed to start; log: %s\n' "$service_log" >&2
@@ -32,7 +32,19 @@ if [ -z "$sclang_path" ] && [ -x /Applications/SuperCollider.app/Contents/MacOS/
     sclang_path=/Applications/SuperCollider.app/Contents/MacOS/sclang
 fi
 if [ -n "$sclang_path" ]; then
-    "$sclang_path" -D tidal/VerifyWorldStateBridge.scd
+    if bridge_output=$("$sclang_path" -D tidal/VerifyWorldStateBridge.scd 2>&1); then
+        printf '%s\n' "$bridge_output"
+    else
+        printf '%s\n' "$bridge_output" >&2
+        exit 1
+    fi
+    case "$bridge_output" in
+        *"PASS: five controls forwarded"*) ;;
+        *)
+            printf '%s\n' 'FAIL: SuperCollider OSC regression check exited without its PASS marker' >&2
+            exit 1
+            ;;
+    esac
 else
     printf '%s\n' 'SKIP: sclang not found; SuperDirt bridge runtime verification unavailable'
 fi

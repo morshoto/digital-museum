@@ -38,7 +38,8 @@ Then launch the macOS application:
 swift run EvolvingImpressionist
 ```
 
-The application enters fullscreen exhibition presentation automatically.
+The application enters a borderless, display-filling exhibition presentation
+automatically without relying on a native macOS Space transition.
 `Cmd-D` toggles developer mode; `Cmd-F` toggles fullscreen. Developer mode
 shows current values, HTTP/OSC status and errors, provides a manual generation
 button, allows overrides, and exposes base, primary amplitude, period, and
@@ -55,8 +56,9 @@ generation attempt logs cumulative success/failure and OSC-send counts plus all
 five sampled parameter values.
 
 If the visual service is stopped, the last valid artwork remains visible and
-later cycles retry. UDP does not require a receiver, so an absent music stack
-does not stop the app.
+later cycles retry. Valid replacement frames crossfade over the retained frame;
+failed or undecodable responses do not advance the transition. UDP does not
+require a receiver, so an absent music stack does not stop the app.
 
 ## Visual service
 
@@ -184,6 +186,30 @@ This machine currently has Apple Command Line Tools without Xcode's XCTest
 runtime, so the Swift checks use a repository-owned executable that exits
 nonzero on failure. The checks remain automated and require no GUI.
 
+Run the one-hour mock-backend endurance test separately after producing the
+release build:
+
+```sh
+swift build -c release
+./scripts/endurance.sh
+```
+
+The endurance runner uses `caffeinate -dimsu`, shortens generation cadence to
+six seconds, introduces a 30-second service outage after ten minutes, verifies
+that generation recovers, samples application RSS/virtual memory/CPU every 30
+seconds, checks every logged parameter remains within `0...1`, and writes
+`app.log`, `service.log`, `events.log`, `process.csv`, and `summary.txt` under a
+reported temporary log directory. Environment variables prefixed with
+`EVOLVING_ENDURANCE_` can shorten the run for script smoke testing; a shortened
+run is not equivalent to the one-hour exhibition gate.
+
+The default modulation periods and phases do not form a perceptually obvious
+one-hour loop. Even the shortest complete per-parameter cycle (`motion`) is
+1,336,007 seconds (about 15.46 days); the exact common period across all 15
+sine components is approximately `5.54e31` years. Individual short components
+repeat within an hour, but their differently phased secondary and low-frequency
+components do not realign with them during that window.
+
 The real SD-Turbo/MPS run, sequential identifiers, timings, memory footprint,
 controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 [`visual_service/VERIFICATION.md`](visual_service/VERIFICATION.md).
@@ -206,9 +232,28 @@ controlled failure test, and Swift/AppKit PNG decoding evidence are recorded in
 
 ## Exhibition operator setup
 
-Connect the Mac to AC power and disable display sleep for the installation
-session (or launch the app through `caffeinate -dimsu`). The application does
-not change system power settings. Confirm the intended display is primary
-before launch, start the visual service first, and use `Cmd-F` as the documented
-manual fullscreen fallback. `Cmd-D` remains available to inspect live values
-and transport/generation counters, then hides all controls for exhibition.
+Connect the Mac to AC power. Disable system sleep, display sleep, and the screen
+saver for the operator account, or keep the launch command under
+`caffeinate -dimsu`; the application intentionally does not make persistent
+power-management changes. Verify those settings again after OS updates and
+before every exhibition session.
+
+The initial SwiftUI window opens on the current primary display and the
+exhibition presentation fills that window's screen. Confirm the intended
+display is primary before launch. There is no display chooser, automatic move
+after hot-plug/rearrangement, or multi-display spanning; reconnecting or
+rearranging displays during a run requires an operator check and may require an
+app relaunch. Menu bar and Dock are set to auto-hide only while exhibition
+fullscreen is active.
+
+Start the mock visual service first, then launch the release application. Use
+`Cmd-F` to leave or restore the borderless exhibition presentation. Use `Cmd-D`
+to inspect the five live values, overrides, modulation controls, and transport/
+generation counters, then press it again so no developer controls remain on
+the artwork.
+
+This SwiftPM MVP has no launch agent, watchdog, signed application bundle, or
+crash relaunch policy. An operator or separately managed supervisor must start
+the service and application after login/reboot and restart either process after
+an unexpected exit. Test that external supervision on the actual installation
+Mac rather than assuming the development shell remains available.
